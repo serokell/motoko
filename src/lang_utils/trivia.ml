@@ -102,7 +102,7 @@ let docs_of_trivia_info (info : trivia_info) : doc list =
               |> Option.map (fun c -> BlockComment c))
       | _ -> None)
     info.leading_trivia
- 
+
 let doc_comment_of_trivia_info (info : trivia_info) : string option =
   let docs = docs_of_trivia_info info in
   let lines = List.map (function BlockComment s | LineComment s -> s) docs in

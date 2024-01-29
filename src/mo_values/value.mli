@@ -116,5 +116,7 @@ val compare : value -> value -> int
 val pp_val : int -> Format.formatter -> value -> unit
 val pp_def : int -> Format.formatter -> def -> unit
 
+val yojson_of_unicode : unicode -> Yojson.Safe.t
+
 val string_of_val : int -> value -> string
 val string_of_def : int -> def -> string

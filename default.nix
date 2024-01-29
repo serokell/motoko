@@ -83,6 +83,7 @@ let commonBuildInputs = pkgs:
     pkgs.ocamlPackages.ppxlib
     pkgs.ocamlPackages.ppx_blob
     pkgs.ocamlPackages.ppx_inline_test
+    pkgs.ocamlPackages.ppx_yojson_conv
     pkgs.ocamlPackages.bisect_ppx
     pkgs.ocamlPackages.uucp
     pkgs.obelisk
@@ -363,7 +364,7 @@ rec {
       (test_subdir dir deps).overrideAttrs {
           EXTRA_MOC_ARGS = "--sanity-checks";
       };
-      
+
     generational_gc_subdir = dir: deps:
       (test_subdir dir deps).overrideAttrs {
           EXTRA_MOC_ARGS = "--generational-gc";

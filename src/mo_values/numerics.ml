@@ -188,6 +188,8 @@ sig
   val rem : t -> t -> t
   val pow : t -> t -> t
   val to_pretty_string : t -> string
+  val yojson_of_t : t -> Yojson.Safe.t
+
 end
 
 module MakeFloat(WasmFloat : Wasm.Float.S) =
@@ -197,6 +199,7 @@ struct
   let pow x y = of_float (to_float x ** to_float y)
   let to_pretty_string w = group_num (WasmFloat.to_string w)
   let to_string = to_pretty_string
+  let yojson_of_t : t -> Yojson.Safe.t = fun x -> yojson_of_string (to_string x)
 end
 
 module Float = MakeFloat(Wasm.F64)
@@ -229,12 +232,15 @@ sig
   val of_string : string -> t
   val to_string : t -> string
   val to_pretty_string : t -> string
+  val yojson_of_t : t -> Yojson.Safe.t
 end
 
 module Int : NumType with type t = Big_int.big_int =
 struct
   open Big_int
   type t = big_int
+  let yojson_of_t : t -> Yojson.Safe.t = fun n -> `Intlit (Big_int.string_of_big_int n)
+
   let signed = true
   let zero = zero_big_int
   let sub = sub_big_int
@@ -280,6 +286,7 @@ end
 module Nat : NumType with type t = Big_int.big_int =
 struct
   include Int
+
   let signed = false
   let of_big_int i =
     if ge i zero then i else raise (Invalid_argument "Nat.of_big_int")

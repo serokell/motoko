@@ -9,6 +9,7 @@ type unop =
   | PosOp                                       (* +x *)
   | NegOp                                       (* -x *)
   | NotOp                                       (* bitwise negation *)
+[@@deriving yojson_of]
 
 type binop =
   | AddOp                                       (* x+y *)
@@ -29,6 +30,7 @@ type binop =
   | WMulOp
   | WPowOp
   | CatOp                                       (* concatenation *)
+  [@@deriving yojson_of]
 
 type relop =
   | EqOp                                        (* x=y *)
@@ -37,6 +39,7 @@ type relop =
   | GtOp                                        (* x>y *)
   | LeOp                                        (* x<=y *)
   | GeOp                                        (* x>=y *)
+  [@@deriving yojson_of]
 
 let impossible _ = raise (Invalid_argument "operator called for None")
 

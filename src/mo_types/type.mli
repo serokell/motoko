@@ -66,6 +66,17 @@ and kind =
 
 val empty_src : src
 
+val yojson_of_typ : typ -> Yojson.Safe.t
+val yojson_of_eff : eff -> Yojson.Safe.t
+val yojson_of_con : con -> Yojson.Safe.t
+val yojson_of_obj_sort : obj_sort -> Yojson.Safe.t
+val yojson_of_func_sort : func_sort -> Yojson.Safe.t
+val yojson_of_async_sort : async_sort -> Yojson.Safe.t
+val yojson_of_bind_sort : bind_sort -> Yojson.Safe.t
+val yojson_of_prim : prim -> Yojson.Safe.t
+val yojson_of_shared_sort : shared_sort -> Yojson.Safe.t
+val yojson_of_shared : ('a -> Yojson.Safe.t) -> 'a shared -> Yojson.Safe.t
+
 (* Syntactic orderings *)
 
 module Ord : sig

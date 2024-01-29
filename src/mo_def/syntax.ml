@@ -7,6 +7,7 @@ open Operator
 (* Notes *)
 
 type typ_note = {note_typ : Type.typ; note_eff : Type.eff}
+[@@deriving yojson_of]
 
 let empty_typ_note = {note_typ = Type.Pre; note_eff = Type.Triv}
 
@@ -17,29 +18,46 @@ type resolved_import =
   | LibPath of string
   | IDLPath of (string * string) (* filepath * bytes *)
   | PrimPath (* the built-in prim module *)
+  [@@deriving yojson_of]
 
 (* Identifiers *)
 
 type id = string Source.phrase
+[@@deriving yojson_of]
+
 type typ_id = (string, Type.con option) Source.annotated_phrase
+[@@deriving yojson_of]
+
 
 
 (* Types *)
 
 type obj_sort = Type.obj_sort Source.phrase
+[@@deriving yojson_of]
+
 type func_sort = Type.func_sort Source.phrase
+[@@deriving yojson_of]
+
 
 type mut = mut' Source.phrase
+[@@deriving yojson_of]
 and mut' = Const | Var
+[@@deriving yojson_of]
 
 and path = (path', Type.typ) Source.annotated_phrase
+[@@deriving yojson_of]
+
 and path' =
   | IdH  of id
   | DotH of path * id
+  [@@deriving yojson_of]
 
-and async_sort = Type.async_sort
+  and async_sort = Type.async_sort
+  [@@deriving yojson_of]
 
 type typ = (typ', Type.typ) Source.annotated_phrase
+[@@deriving yojson_of]
+
 and typ' =
   | PathT of path * typ list                       (* type path *)
   | PrimT of string                                (* primitive *)
@@ -54,6 +72,7 @@ and typ' =
   | OrT of typ * typ                               (* union *)
   | ParT of typ                                    (* parentheses, used to control function arity only *)
   | NamedT of id * typ                             (* parenthesized single element named "tuple" *)
+  [@@deriving yojson_of]
 
 and scope = typ
 and typ_field = typ_field' Source.phrase
@@ -91,6 +110,7 @@ type lit =
   | TextLit of string
   | BlobLit of string
   | PreLit of string * Type.prim
+[@@deriving yojson_of]
 
 
 (* Patterns *)
@@ -114,27 +134,38 @@ and pat' =
 
 and pat_field = pat_field' Source.phrase
 and pat_field' = {id : id; pat : pat}
+[@@deriving yojson_of]
 
 
 (* Expressions *)
 
 type vis = vis' Source.phrase
+[@@deriving yojson_of]
+
 and vis' =
   | Public of string option
   | Private
   | System
+[@@deriving yojson_of]
 
 let is_public vis = match vis.Source.it with Public _ -> true | _ -> false
 
 type stab = stab' Source.phrase
+[@@deriving yojson_of]
+
 and stab' = Stable | Flexible
+[@@deriving yojson_of]
+
 
 type op_typ = Type.typ ref (* For overloaded resolution; initially Type.Pre. *)
+[@@deriving yojson_of]
 
 
 type inst = (typ list option, Type.typ list) Source.annotated_phrase (* For implicit scope instantiation *)
+[@@deriving yojson_of]
 
 type sort_pat = (Type.shared_sort * pat) Type.shared Source.phrase
+[@@deriving yojson_of]
 
 type sugar = bool (* Is the source of a function body a block `<block>`,
                      subject to further desugaring during parse,
@@ -144,6 +175,7 @@ type sugar = bool (* Is the source of a function body a block `<block>`,
                      value of the sugar field is irrelevant.
                      This flag is used to correctly desugar an actor's
                      public functions as oneway, shared functions *)
+[@@deriving yojson_of]
 
 type exp = (exp', typ_note) Source.annotated_phrase
 and exp' =
@@ -215,6 +247,8 @@ and case' = {pat : pat; exp : exp}
 (* Declarations *)
 
 and dec = (dec', typ_note) Source.annotated_phrase
+[@@deriving yojson_of]
+
 and dec' =
   | ExpD of exp                                (* plain unit expression *)
   | LetD of pat * exp * exp option             (* immutable, with an optional fail block *)
@@ -222,13 +256,17 @@ and dec' =
   | TypD of typ_id * typ_bind list * typ       (* type *)
   | ClassD of                                  (* class *)
       sort_pat * typ_id * typ_bind list * pat * typ option * obj_sort * id * dec_field list
+[@@deriving yojson_of]
 
 
 (* Program (pre unit detection) *)
+type prog' = dec list
+[@@deriving yojson_of]
 
 type prog_note = { filename : string; trivia : Trivia.triv_table }
+
 type prog = (prog', prog_note) Source.annotated_phrase
-and prog' = dec list
+
 
 (* Signatures (stable variables) *)
 

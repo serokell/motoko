@@ -27,6 +27,7 @@ sig
   val of_string : string -> t
   val to_string : t -> string
   val to_pretty_string : t -> string
+  val yojson_of_t : t -> Yojson.Safe.t
 end
 
 (* Extension of NumType with wrapping and bit-wise operations *)
@@ -61,6 +62,7 @@ sig
   val rem : t -> t -> t
   val pow : t -> t -> t
   val to_pretty_string : t -> string
+  val yojson_of_t : t -> Yojson.Safe.t
 end
 
 module Float : FloatType with type bits = int64 and type t = Wasm.F64.t

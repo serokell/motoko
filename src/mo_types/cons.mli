@@ -17,3 +17,6 @@ val unsafe_set_kind : 'a t -> 'a -> unit (* cf. Type.set_kind *)
 
 val eq : 'a t -> 'a t -> bool
 val compare : 'a t -> 'a t -> int
+
+val yojson_of_t : ('a -> Yojson.Safe.t) -> 'a t -> Yojson.Safe.t
+

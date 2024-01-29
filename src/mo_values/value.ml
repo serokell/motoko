@@ -20,7 +20,7 @@ end
 
 (* Types *)
 
-type unicode = int
+type unicode = int [@@deriving yojson]
 
 type actor_id = string
 

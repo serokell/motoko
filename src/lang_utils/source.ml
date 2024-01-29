@@ -1,7 +1,14 @@
 type pos = {file : string; line : int; column : int}
+[@@deriving yojson_of]
+
 type region = {left : pos; right : pos}
+[@@deriving yojson_of]
+
 type ('a, 'b) annotated_phrase = {at : region; it : 'a; mutable note: 'b}
+[@@deriving yojson_of]
+
 type 'a phrase = ('a, unit) annotated_phrase
+[@@deriving yojson_of]
 
 let (@@) it at = {it; at; note = ()}
 
@@ -27,4 +34,3 @@ let string_of_region r =
 (* generic parse error *)
 
 exception ParseError of region * string
-

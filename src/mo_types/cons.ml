@@ -11,7 +11,10 @@ same ref.
 *)
 
 type 'a con = {name : string; stamp : int; kind : 'a ref}
+[@@deriving yojson_of]
+
 type 'a t = 'a con
+[@@deriving yojson_of]
 
 module Stamps = Env.Make(String)
 

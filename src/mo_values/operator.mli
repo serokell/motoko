@@ -48,3 +48,7 @@ val has_relop : relop -> typ -> bool
 val type_unop : unop -> typ -> typ
 val type_binop : binop -> typ -> typ
 val type_relop : relop -> typ -> typ
+
+val yojson_of_unop : unop -> Yojson.Safe.t
+val yojson_of_binop : binop -> Yojson.Safe.t
+val yojson_of_relop : relop -> Yojson.Safe.t

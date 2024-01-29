@@ -1,24 +1,37 @@
 (* Representation *)
 type lab = string
+[@@deriving yojson_of]
+
 type var = string
+[@@deriving yojson_of]
 
 type control =
   | Returns        (* regular local function or one-shot shared function *)
   | Promises       (* shared function producing a future value upon call *)
   | Replies        (* (IR only): responds asynchronously using `reply` *)
+[@@deriving yojson_of]
 
 type obj_sort =
    Object
  | Actor
  | Module
  | Memory          (* (codegen only): stable memory serialization format *)
+[@@deriving yojson_of]
 
 type async_sort = Fut | Cmp
-type shared_sort = Query | Write | Composite
-type 'a shared = Local | Shared of 'a
-type func_sort = shared_sort shared
-type eff = Triv | Await
+[@@deriving yojson_of]
 
+type shared_sort = Query | Write | Composite
+[@@deriving yojson_of]
+
+type 'a shared = Local | Shared of 'a
+[@@deriving yojson_of]
+
+type func_sort = shared_sort shared
+[@@deriving yojson_of]
+
+type eff = Triv | Await
+[@@deriving yojson_of]
 type prim =
   | Null
   | Bool
@@ -39,6 +52,7 @@ type prim =
   | Error
   | Principal
   | Region
+[@@deriving yojson_of]
 
 type t = typ
 and typ =
@@ -57,20 +71,31 @@ and typ =
   | Non                                       (* bottom *)
   | Typ of con                                (* type (field of module) *)
   | Pre                                       (* pre-type *)
+  [@@deriving yojson_of]
 
 and scope = typ
 and bind_sort = Scope | Type
 
 and bind = {var : var; sort: bind_sort; bound : typ}
+[@@deriving yojson_of]
+
 and src = {depr : string option; region : Source.region}
+[@@deriving yojson_of]
+
 and field = {lab : lab; typ : typ; src : src}
+[@@deriving yojson_of]
+
 
 and con = kind Cons.t
+[@@deriving yojson_of]
+
 and kind =
   | Def of bind list * typ
   | Abs of bind list * typ
+  [@@deriving yojson_of]
 
 let empty_src = {depr = None; region = Source.no_region}
+[@@deriving yojson_of]
 
 (* Efficient comparison *)
 let tag_prim = function

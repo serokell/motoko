@@ -2,8 +2,8 @@
   (name lang_utils)
   (libraries lib mo_config)
   (wrapped false)
-
-  (preprocess (pps ppx_blob))
+  (flags (:standard -w -66))
+  (preprocess (pps ppx_blob ppx_yojson_conv))
   (preprocessor_deps (glob_files error_codes/*.md))
   (instrumentation (backend bisect_ppx --bisect-silent yes))
 )
