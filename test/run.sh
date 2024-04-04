@@ -124,8 +124,7 @@ function run () {
   fi
 
   $ECHO -n " [$ext]"
-  $ECHO "$@" >& $out/$base.$ext
-  "$@" >& $out/$base.$ext
+  "$@" > $out/$base.$ext 2>$out/$base.$ext.stderr
   local ret=$?
 
   if [ $ret != 0 ]
@@ -133,6 +132,9 @@ function run () {
   else rm -f $out/$base.$ext.ret
   fi
   diff_files="$diff_files $base.$ext.ret"
+
+  normalize $out/$base.$ext.stderr
+  diff_files="$diff_files $base.$ext.stderr"
 
   normalize $out/$base.$ext
   diff_files="$diff_files $base.$ext"
