@@ -92,8 +92,21 @@ and stmt' =
 
 and typ = (typ', info) Source.annotated_phrase
 
+
+and mut = Const | Mut
+
 and typ' =
   | IntT
   | BoolT
   | RefT
+  | ArrayT of mut * typ'
 
+let type_field = function
+  | IntT -> "int"
+  | BoolT -> "bool"
+  | RefT -> "ref"
+  | ArrayT _ -> "array" (* TODO *)
+
+let inner_type = function
+  | Source.{it=ArrayT (k, t); _} -> t
+  | Source.{it=t; _} -> t

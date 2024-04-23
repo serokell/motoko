@@ -87,11 +87,13 @@ and pp_returns ppf pars =
     fprintf ppf "@[<1> returns (%a)@]"
       (pp_print_list ~pp_sep:comma (pp_local)) pars
 
-and pp_typ ppf t =
-  match t.it with
+and pp_typ ppf t = pp_typ' ppf t.it
+and pp_typ' ppf t =
+  match t with
   | IntT -> pr ppf "Int"
   | BoolT -> pr ppf "Bool"
   | RefT -> pr ppf "Ref"
+  | ArrayT (_, t) -> fprintf ppf "Array"
 
 and pp_exp ppf exp =
   match exp.it with

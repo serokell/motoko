@@ -62,6 +62,32 @@ exception Unsupported of Source.region * string
 let unsupported at sexp =
   raise (Unsupported (at, (Wasm.Sexpr.to_string 80 sexp)))
 
+let array_acc id_exp (kind, typ) at =
+     let (!!) p = !!! at p in
+     let fld = type_field typ in
+     (* let var = !! (LocalVar (id, !!(ArrayT (kind, typ)))) in *)
+     let pred_name = match kind with | Mut -> "array_acc_mut" | Const -> "array_acc" in
+     !! (MacroCall (pred_name, [id_exp; !!(MacroArg !!fld)]))
+
+let array_size_inv id_exp n at =
+  !!! at (EqCmpE (!!! at (FuncCall ("size", [id_exp])), intLitE at n))
+
+let array_alloc var (*rename*) typ es at =
+  match typ.it with
+  | ArrayT (kind, typ) ->
+     let (!!) p = !!! at p in
+     (* let var = !! (LocalVar (id, !!typ)) in *)
+     let ref_field = !! (type_field typ) in
+     let init_array = List.mapi (fun i e ->
+       FieldAssignS ((!! (FuncCall ("loc", [var; intLitE at i])), ref_field), e)) es in
+     (* InhaleS (!! (FldAcc (!! (FuncCall ("loc", [var; from_int i])), ref_field)) === e)) es in *)
+     let stmt =  [ InhaleS (array_acc var (Mut, typ) at)
+                 ; InhaleS (array_size_inv var (List.length es) at)
+                 ] @ init_array @ [
+                   ExhaleS (array_acc var (Mut, typ) at)
+                 ; InhaleS (array_acc var (kind, typ) at)]
+     in List.map (!!) stmt
+| _ -> []
 type sort = Field | Local | Method
 
 module Env = T.Env
@@ -542,4 +568,6 @@ and tr_typ' typ =
   | T.Prim T.Int -> IntT
   | T.Prim T.Nat -> IntT    (* Viper has no native support for Nat, so translate to Int *)
   | T.Prim T.Bool -> BoolT
+  | T.Array (T.Mut typ) -> ArrayT (Mut  , tr_typ' (T.normalize typ))
+  | T.Array typ         -> ArrayT (Const, tr_typ' (T.normalize typ))
   | _ -> unsupported Source.no_region (Mo_types.Arrange_type.typ (T.normalize typ))
