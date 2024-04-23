@@ -99,8 +99,12 @@ and pp_exp ppf exp =
      fprintf ppf "%s" id.it
   | FldAcc fldacc ->
      pp_fldacc ppf fldacc
-  | MacroCall (m, e) ->
-     fprintf ppf "@[%s(%a)@]" m pp_exp e
+  | MacroArg id ->
+     fprintf ppf "%s" id.it
+  | MacroCall (m, es) ->
+     fprintf ppf "@[%s(%a)@]" m (pp_print_list pp_exp ~pp_sep:comma) es
+  | FuncCall (id, es) ->
+     fprintf ppf "@[%s(%a)@]" id (pp_print_list pp_exp ~pp_sep:comma) es
   | NotE e ->
      fprintf ppf "@[(!%a)@]" pp_exp e
   | MinusE e ->

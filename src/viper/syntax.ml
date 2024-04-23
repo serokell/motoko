@@ -49,7 +49,9 @@ and exp' =
   | FldAcc of fldacc
   | PermE of perm          (* perm_amount *)
   | AccE of fldacc * exp   (* acc((rcvr: exp).field, (exp: perm_amount)) *)
-  | MacroCall of string * exp
+  | MacroCall of string * exp list
+  | MacroArg of id         (* untyped macro argument e.g. "macro(a, f) { a.f }" *)
+  | FuncCall of string * exp list
 
 and perm = (perm', info) Source.annotated_phrase
 
