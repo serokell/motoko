@@ -259,6 +259,20 @@ and unit_decl' ctxt (d : M.dec_field') at =
   let self_id = !!! (Source.no_region) "$Self" in
   let self_var at = !!! at (LocalVar (!!! at self_id.it, !!! at RefT)) in
   match d.M.dec.it with
+  | M.VarD (x, {it=M.AnnotE ({it=M.ArrayE (mut, es); note;_}, _); at=e_at;_}) ->
+      let lhs = !!! Source.no_region (FldAcc (self_var e_at, id x)) in
+      let typ' = tr_typ note.M.note_typ in
+      { ctxt with ids = Env.add x.it Field ctxt.ids },
+      Some (fun at -> (* perm *)
+              !!! at (AndE (accE at (self_var at, id x),
+                      !!! at (AndE (array_acc lhs (Mut, inner_type typ') at,
+                                    array_size_inv lhs (List.length es) at))))),
+      Some (fun ctxt -> (* init *)
+          let es' = List.map (fun e -> exp ctxt e) es in
+          array_alloc lhs typ' es' e_at),
+      (fun ctxt' ->
+        (FieldI(id x, typ'),
+        NoInfo))
   | M.VarD (x, e) ->
       { ctxt with ids = Env.add x.it Field ctxt.ids },
       Some (fun at -> accE at (self_var at, id x)), (* perm *)
@@ -346,9 +360,20 @@ and decs ctxt ds =
        let (ls, ss) = mk_ss ctxt' in
        (l @ ls, s @ ss))
 
+(* TODO: make assign_stmt work with arrays then simple this function *)
 and dec ctxt d =
   let (!!) p = !!! (d.at) p in
   match d.it with
+  (* TODO AnnotE could be nested *)
+  | M.VarD (x,               {it=M.AnnotE ({it=M.ArrayE (mut, es); note; _}, _); _})
+  | M.LetD ({it=M.VarP x;_}, {it=M.AnnotE ({it=M.ArrayE (mut, es); note; _}, _); _}, None) ->
+     ({ctxt with ids = Env.add x.it Local ctxt.ids },
+      fun ctxt' ->
+      let es' = List.map (exp ctxt') es in
+      let t' = tr_typ note.M.note_typ in
+      let lhs = !!(LocalVar (id x, t')) in
+      [ !!(id x, t') ],
+      (array_alloc lhs t' es' (d.at)))
   | M.VarD (x, e) ->
      (* TODO: translate e? *)
     { ctxt with ids = Env.add x.it Local ctxt.ids },
@@ -442,6 +467,18 @@ and stmt ctxt (s : M.exp) : seqn =
      let invs' = List.map (fun inv -> exp ctxt inv) invs in
      !!([],
         [ !!(WhileS(exp ctxt e, invs', stmt ctxt s1')) ])
+  (* TODO: remove by Motoko->Motoko transformation *)
+  | M.(AssignE({it = VarE x; _}, {it = ArrayE (mut, es); note={note_typ=typ; _}; _})) ->
+     let typ' = tr_typ typ in
+     let es'  = List.map (exp ctxt) es in
+     let temp_id = fresh_id (fresh_id (id x).it) in
+     let lhs = !!(LocalVar (!!temp_id, typ')) in
+     !! ([!!(!!temp_id, typ')],
+         array_alloc lhs typ' es' (s.at)
+         @ [!!(VarAssignS (id x, !!(LocalVar (!!temp_id, typ'))))])
+  | M.(AssignE({it = IdxE (e1, e2);_}, e3)) ->
+     !!([],
+        [!!(FieldAssignS (fldacc ctxt s.at e1 e2 e3.note.M.note_typ, exp ctxt e3))])
   | M.(AssignE({it = VarE x; _}, e2)) ->
      begin match Env.find x.it ctxt.ids with
      | Local ->
@@ -550,6 +587,8 @@ and exp ctxt e =
      !!(Implies (exp ctxt e1, exp ctxt e2))
   | M.OldE e ->
     !!(Old (exp ctxt e))
+  | M.IdxE (e1, e2) ->
+     !!(FldAcc (fldacc ctxt e.at e1 e2 e.note.M.note_typ))
   | _ ->
      unsupported e.at (Arrange.exp e)
 
@@ -564,6 +603,10 @@ and rets t_opt =
     )
 
 and id id = { it = id.it; at = id.at; note = NoInfo }
+
+and fldacc ctxt at e1 e2 el_typ =
+  let fld = type_field (tr_typ' el_typ) in
+  !!! at (FuncCall ("loc", [exp ctxt e1; exp ctxt e2])), !!! at fld
 
 and tr_typ typ =
   { it = tr_typ' typ;
