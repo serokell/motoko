@@ -166,7 +166,7 @@ and unit' (u : M.comp_unit) : prog =
   match body.it with
   | M.ActorU(id_opt, decs) ->
     let ctxt = { self = None; ids = Env.empty; ghost_items = ref []; ghost_inits = ref []; ghost_perms = ref []; ghost_conc = ref [] } in
-    let ctxt', inits, mk_is = dec_fields ctxt decs in
+    let ctxt', perms, inits, mk_is = unit_decls ctxt decs in
     let is' = List.map (fun mk_i -> mk_i ctxt') mk_is in
     (* given is', compute ghost_is *)
     let ghost_is = List.map (fun mk_i -> mk_i ctxt') !(ctxt.ghost_items) in
@@ -174,8 +174,6 @@ and unit' (u : M.comp_unit) : prog =
     let self_id = !!! (Source.no_region) "$Self" in
     let self_typ = !!! (self_id.at) RefT in
     let ctxt'' = { ctxt' with self = Some self_id.it } in
-    let perms = List.map (fun (id, _) -> fun (at : region) ->
-       (accE at (self ctxt'' at, id))) inits in
     let ghost_perms = List.map (fun mk_p -> mk_p ctxt'') !(ctxt.ghost_perms) in
     let perm =
       fun (at : region) ->
@@ -186,10 +184,7 @@ and unit' (u : M.comp_unit) : prog =
          (perms @ ghost_perms)
     in
     (* Add initializer *)
-    let init_list = List.map (fun (id, init) ->
-        !!! { left = id.at.left; right = init.at.right }
-          (FieldAssignS((self ctxt'' init.at, id), exp ctxt'' init)))
-        inits in
+    let init_list = List.concat_map (fun init -> init ctxt'') inits in
     let init_list = init_list @ List.map (fun mk_s -> mk_s ctxt'') !(ctxt.ghost_inits) in
     let init_body =
       !!! (body.at) ([], init_list)(* ATG: Is this the correct position? *)
@@ -244,45 +239,49 @@ and unit' (u : M.comp_unit) : prog =
     !!! (body.at) is
   | _ -> assert false
 
-and dec_fields (ctxt : ctxt) (ds : M.dec_field list) =
+and unit_decls (ctxt : ctxt) (ds : M.dec_field list) =
+  let addSome x xs = match x with Some x' -> x' :: xs | _ -> xs in
   match ds with
   | [] ->
-    (ctxt, [], [])
+    (ctxt, [], [], [])
   | d :: ds ->
-    let ctxt, init, mk_i = dec_field ctxt d in
-    let ctxt, inits, mk_is = dec_fields ctxt ds in
-    (ctxt, (match init with Some i -> i::inits | _ -> inits), mk_i::mk_is)
+    let ctxt, perm, init, mk_i = unit_decl' ctxt d.it (d.at) in
+    let mk_i' = (fun ctxt' ->
+        let (i, info) = mk_i ctxt' in
+        (^^^) (d.at) i info) in
+    let ctxt, perms, inits, mk_is = unit_decls ctxt ds in
+    (ctxt,
+     addSome perm perms,
+     addSome init inits,
+     addSome (Some mk_i') mk_is)
 
-and dec_field ctxt d =
-  let ctxt, init, mk_i = dec_field' ctxt d.it in
-   (ctxt,
-    init,
-    fun ctxt' ->
-      let (i, info) = mk_i ctxt' in
-      (^^^) (d.at) i info)
-
-and dec_field' ctxt d =
+and unit_decl' ctxt (d : M.dec_field') at =
+  let self_id = !!! (Source.no_region) "$Self" in
+  let self_var at = !!! at (LocalVar (!!! at self_id.it, !!! at RefT)) in
   match d.M.dec.it with
   | M.VarD (x, e) ->
       { ctxt with ids = Env.add x.it Field ctxt.ids },
-      Some (id x, e),
-      fun ctxt' ->
+      Some (fun at -> accE at (self_var at, id x)), (* perm *)
+      Some (fun ctxt -> (* init *)
+              [!!! {left = x.at.left; right = e.at.right}
+                   (FieldAssignS((self_var e.at, id x), exp ctxt e))]),
+      (fun ctxt' ->
         (FieldI(id x, tr_typ e.note.M.note_typ),
-        NoInfo)
+        NoInfo))
   (* async functions *)
   | M.(LetD ({it=VarP f;_},
              {it=FuncE(x, sp, tp, p, t_opt, sugar,
              {it = AsyncE (T.Fut, _, e); _} );_}, None)) -> (* ignore async *)
       { ctxt with ids = Env.add f.it Method ctxt.ids },
-      None,
+      None, (* no perm *)
+      None, (* no init *)
       fun ctxt' ->
         let open Either in
-        let self_id = !!! (Source.no_region) "$Self" in
         let method_args = args p in
         let ctxt'' = { ctxt'
           with self = Some self_id.it;
                ids = List.fold_left (fun env (id, _) -> Env.add id.it Local env) ctxt.ids method_args }
-        in (* TODO: add args (and rets?) *)
+        in
         let stmts = stmt ctxt'' e in
         let _, stmts = extract_concurrency stmts in
         let pres, stmts' = List.partition_map (function { it = PreconditionS exp; _ } -> Left exp | s -> Right s) (snd stmts.it) in
@@ -295,15 +294,15 @@ and dec_field' ctxt d =
              {it=FuncE(x, sp, tp, p, t_opt, sugar, e );_},
              None)) ->
       { ctxt with ids = Env.add f.it Method ctxt.ids },
-      None,
+      None, (* no perm *)
+      None, (* no init *)
       fun ctxt' ->
         let open Either in
-        let self_id = !!! (Source.no_region) "$Self" in
         let method_args = args p in
         let ctxt'' = { ctxt'
           with self = Some self_id.it;
-               ids = List.fold_left (fun env (id, _) -> Env.add id.it Local env) ctxt.ids method_args }
-        in (* TODO: add args (and rets?) *)
+               ids  = List.fold_left (fun env (id, _) -> Env.add id.it Local env) ctxt.ids method_args }
+        in
         let stmts = stmt ctxt'' e in
         let _, stmts = extract_concurrency stmts in
         let pres, stmts' = List.partition_map (function { it = PreconditionS exp; _ } -> Left exp | s -> Right s) (snd stmts.it) in
@@ -313,7 +312,8 @@ and dec_field' ctxt d =
         PrivateFunction f.it)
   | M.(ExpD { it = AssertE (Invariant, e); at; _ }) ->
       ctxt,
-      None,
+      None, (* no perm *)
+      None, (* no init *)
       fun ctxt' ->
         (InvariantI (Printf.sprintf "invariant_%d" at.left.line, exp { ctxt' with self = Some "$Self" }  e), NoInfo)
   | _ ->
