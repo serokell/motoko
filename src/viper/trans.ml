@@ -88,6 +88,15 @@ let array_alloc var (*rename*) typ es at =
                  ; InhaleS (array_acc var (kind, typ) at)]
      in List.map (!!) stmt
 | _ -> []
+
+(* map type to predicate *)
+let type_acc id typ at =
+  let id_exp = !!! at (LocalVar (id, typ)) in
+  match typ.it with
+  | ArrayT (kind, typ) -> Some (array_acc id_exp (kind, typ) at)
+  | _ -> None
+
+
 type sort = Field | Local | Method
 
 module Env = T.Env
@@ -301,7 +310,11 @@ and unit_decl' ctxt (d : M.dec_field') at =
         let pres, stmts' = List.partition_map (function { it = PreconditionS exp; _ } -> Left exp | s -> Right s) (snd stmts.it) in
         let posts, stmts' = List.partition_map (function { it = PostconditionS exp; _ } -> Left exp | s -> Right s) stmts' in
         let stmts'' = stmts' @ [!!! Source.no_region (LabelS(!!! (Source.no_region) "$Ret"))] in
-        (MethodI(id f, (self_id, !!! Source.no_region RefT)::method_args, rets t_opt, pres, posts, Some { stmts with it = fst stmts.it, stmts'' } ),
+        (* extract pre/post condition from types *)
+        let type_accs = List.filter_map (fun (id, typ) -> type_acc id typ Source.no_region) method_args in
+        let pres' = type_accs @ pres in
+        let posts' = type_accs @ posts in
+        (MethodI(id f, (self_id, !!! Source.no_region RefT)::method_args, rets t_opt, pres', posts', Some { stmts with it = fst stmts.it, stmts'' } ),
         PublicFunction f.it)
   (* private sync functions *)
   | M.(LetD ({it=VarP f;_},
@@ -322,7 +335,11 @@ and unit_decl' ctxt (d : M.dec_field') at =
         let pres, stmts' = List.partition_map (function { it = PreconditionS exp; _ } -> Left exp | s -> Right s) (snd stmts.it) in
         let posts, stmts' = List.partition_map (function { it = PostconditionS exp; _ } -> Left exp | s -> Right s) stmts' in
         let stmts'' = stmts' @ [!!! Source.no_region (LabelS(!!! (Source.no_region) "$Ret"))] in
-        (MethodI(id f, (self_id, !!! Source.no_region RefT)::method_args, rets t_opt, pres, posts, Some { stmts with it = fst stmts.it, stmts'' } ),
+        (* extract pre/post condition from types *)
+        let type_accs = List.filter_map (fun (id, typ) -> type_acc id typ Source.no_region) method_args in
+        let pres' = type_accs @ pres in
+        let posts' = type_accs @ posts in
+        (MethodI(id f, (self_id, !!! Source.no_region RefT)::method_args, rets t_opt, pres', posts', Some { stmts with it = fst stmts.it, stmts'' } ),
         PrivateFunction f.it)
   | M.(ExpD { it = AssertE (Invariant, e); at; _ }) ->
       ctxt,
