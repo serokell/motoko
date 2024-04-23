@@ -26,6 +26,8 @@ let rec pp_prog ppf p =
 
 and pp_item ppf i =
   match i.it with
+  | ImportI id ->
+     fprintf ppf "@[<2>import \"%s\"@]" id.it
   | FieldI (id, typ) ->
     fprintf ppf "@[<2>field %s:@ %a@]"
       id.it

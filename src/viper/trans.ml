@@ -147,11 +147,17 @@ let rec extract_concurrency (seq : seqn) : stmt' list * seqn =
   let conc, stmts = List.fold_left extr ([], []) stmts in
   rev conc, { seq with it = fst seq.it, rev stmts }
 
+let prelude =
+  let (!!) p = !!! Source.no_region p in
+  [ !! (ImportI (!! "../../src/viper/lib/array.vpr")) ]
+
 let rec unit (u : M.comp_unit) : prog Diag.result =
   Diag.(
     reset_stamps();
-    try return (unit' u) with
-    | Unsupported (at, desc) -> error at "0" "viper" ("translation to viper failed:\n"^desc)
+    let prog = unit' u in
+    let prog' = {prog with it = (prelude @ prog.it)} in
+    try return prog' with
+    | Unsupported (at, desc) -> error at "0" "viper" ("translation to viper failed:\n")
     | _ -> error u.it.M.body.at "1" "viper" "translation to viper failed"
   )
 

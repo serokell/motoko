@@ -10,7 +10,7 @@ type prog = (item list, info) Source.annotated_phrase
 
 and item = (item', info) Source.annotated_phrase
 and item' =
-  (* | import path *)
+  | ImportI of id
   | FieldI of id * typ
   | MethodI of id * par list * par list * exp list * exp list * seqn option
   | InvariantI of string * exp
