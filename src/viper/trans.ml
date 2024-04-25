@@ -65,27 +65,25 @@ let unsupported at sexp =
 let array_acc id_exp (kind, typ) at =
      let (!!) p = !!! at p in
      let fld = type_field typ in
-     (* let var = !! (LocalVar (id, !!(ArrayT (kind, typ)))) in *)
      let pred_name = match kind with | Mut -> "array_acc_mut" | Const -> "array_acc" in
      !! (MacroCall (pred_name, [id_exp; !!(MacroArg !!fld)]))
 
 let array_size_inv id_exp n at =
   !!! at (EqCmpE (!!! at (FuncCall ("size", [id_exp])), intLitE at n))
 
-let array_alloc var (*rename*) typ es at =
+let array_alloc id_exp typ es at =
   match typ.it with
   | ArrayT (kind, typ) ->
      let (!!) p = !!! at p in
-     (* let var = !! (LocalVar (id, !!typ)) in *)
      let ref_field = !! (type_field typ) in
      let init_array = List.mapi (fun i e ->
-       FieldAssignS ((!! (FuncCall ("loc", [var; intLitE at i])), ref_field), e)) es in
+       FieldAssignS ((!! (FuncCall ("loc", [id_exp; intLitE at i])), ref_field), e)) es in
      (* InhaleS (!! (FldAcc (!! (FuncCall ("loc", [var; from_int i])), ref_field)) === e)) es in *)
-     let stmt =  [ InhaleS (array_acc var (Mut, typ) at)
-                 ; InhaleS (array_size_inv var (List.length es) at)
+     let stmt =  [ InhaleS (array_acc id_exp (Mut, typ) at)
+                 ; InhaleS (array_size_inv id_exp (List.length es) at)
                  ] @ init_array @ [
-                   ExhaleS (array_acc var (Mut, typ) at)
-                 ; InhaleS (array_acc var (kind, typ) at)]
+                   ExhaleS (array_acc id_exp (Mut, typ) at)
+                 ; InhaleS (array_acc id_exp (kind, typ) at)]
      in List.map (!!) stmt
 | _ -> []
 
