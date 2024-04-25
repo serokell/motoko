@@ -379,20 +379,9 @@ and decs ctxt ds =
        let (ls, ss) = mk_ss ctxt' in
        (l @ ls, s @ ss))
 
-(* TODO: make assign_stmt work with arrays then simple this function *)
 and dec ctxt d =
   let (!!) p = !!! (d.at) p in
   match d.it with
-  (* TODO AnnotE could be nested *)
-  | M.VarD (x,               {it=M.AnnotE ({it=M.ArrayE (mut, es); note; _}, _); _})
-  | M.LetD ({it=M.VarP x;_}, {it=M.AnnotE ({it=M.ArrayE (mut, es); note; _}, _); _}, None) ->
-     ({ctxt with ids = Env.add x.it Local ctxt.ids },
-      fun ctxt' ->
-      let es' = List.map (exp ctxt') es in
-      let t' = tr_typ note.M.note_typ in
-      let lhs = !!(LocalVar (id x, t')) in
-      [ !!(id x, t') ],
-      (array_alloc lhs t' es' (d.at)))
   | M.VarD (x, e) ->
      (* TODO: translate e? *)
     { ctxt with ids = Env.add x.it Local ctxt.ids },
@@ -540,10 +529,16 @@ and stmt ctxt (s : M.exp) : seqn =
 and assign_stmt ctxt x e at =
   let (!!) p = !!! at p in
   match e with
+  | M.({it=AnnotE (e, _);_}) -> assign_stmt ctxt x e at
   | M.({it = CallE({it = VarE m; _}, inst, args); _}) ->
      [ !!(MethodCallS ([x], id m,
                        let self_var = self ctxt m.at in
                        self_var :: call_args ctxt args))]
+  | M.({it=ArrayE (mut, es); note;_}) ->
+      let es' = List.map (exp ctxt) es in
+      let t' = tr_typ note.M.note_typ in
+      let lhs = !!(LocalVar (x, t')) in
+      (array_alloc lhs t' es' at)
   | _ -> [!! (VarAssignS(x, exp ctxt e))]
 
 and call_args ctxt e =

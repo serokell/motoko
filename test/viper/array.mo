@@ -1,12 +1,14 @@
 // @verify
+// import Array "mo:base/Array";
 
 actor {
     
     var arr : [var Int] = [var 1, 2];
     var f : Int = 2;
+    var count : Int = 42; // let is not supported
 
     public func foo(): async Int {
-        var vi_a : [Int] = [1]; // : [Int] cause error
+        var vi_a : [Int] = (([1] : [Int]) : [Int]);
         var vm_a : [var Int] = [var 1, 2];
         let li_a : [Bool] = [false];
         let lm_a : [var Bool] = [var false];
