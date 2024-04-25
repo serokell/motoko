@@ -288,6 +288,7 @@ do
   $ECHO -n "$base:"
   [ -d $out ] || mkdir $out
   [ -d $ok ] || mkdir $ok
+  [ -d $out/lib ] ||  ln -s ../../../src/viper/lib/ $out/lib
 
   rm -rf $out/$base $out/$base.*
 

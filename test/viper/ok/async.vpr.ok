@@ -1,3 +1,4 @@
+import "lib/array.vpr"
 field $message_async_4: Int
 field $message_async_2: Int
 field $message_async: Int

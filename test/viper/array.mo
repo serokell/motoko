@@ -37,8 +37,8 @@ actor {
       return x[1];
     };
 
-    private func bar2(x: [Int]): Int {
-      // assert:func size(x) >= 2; error
+    public func bar2(x: [Int]):  async Int {
+      assert:func x.size() == 2;
       let y : [var Bool] = [var false];
       y[0] := true;
       let z : Int = x[0] + x[1];
@@ -48,5 +48,9 @@ actor {
     public func inc() : async Int {
       arr[0] := arr[0] + 1;
       return arr[0]
-    }
+    };
+
+    public func len(): async Int {
+      return arr.size();
+    };
 }
