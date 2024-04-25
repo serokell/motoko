@@ -68,8 +68,11 @@ let array_acc id_exp (kind, typ) at =
      let pred_name = match kind with | Mut -> "array_acc_mut" | Const -> "array_acc" in
      !! (MacroCall (pred_name, [id_exp; !!(MacroArg !!fld)]))
 
+let array_size id_exp at =
+  !!! at (FuncCall ("size", [id_exp]))
+
 let array_size_inv id_exp n at =
-  !!! at (EqCmpE (!!! at (FuncCall ("size", [id_exp])), intLitE at n))
+  !!! at (EqCmpE (array_size id_exp at, intLitE at n))
 
 let array_alloc id_exp typ es at =
   match typ.it with
@@ -564,6 +567,8 @@ and exp ctxt e =
     end
   | M.AnnotE(a, b) ->
     exp ctxt a
+  | M.CallE ({it=M.DotE (id_exp, {it="size";_});_}, _inst, {it=M.TupE ([]);at;_})
+    -> array_size (exp ctxt id_exp) at
   | M.LitE r ->
     begin match !r with
     | M.BoolLit b ->
