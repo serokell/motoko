@@ -1,4 +1,4 @@
-import "lib/array.vpr"
+import "viper_lib/array.vpr"
 define $Perm($Self) ((((true && (acc(($Self).arr,write) && (array_acc_mut(
                                                             ($Self).arr, int) && (
   size(($Self).arr) == 2)))) && acc(($Self).f,write)) && acc(($Self).count,write)))

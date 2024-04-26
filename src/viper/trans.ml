@@ -159,7 +159,7 @@ let rec extract_concurrency (seq : seqn) : stmt' list * seqn =
 
 let prelude =
   let (!!) p = !!! Source.no_region p in
-  [ !! (ImportI (!! "lib/array.vpr")) ]
+  [ !! (ImportI (!! "viper_lib/array.vpr")) ]
 
 let rec unit (u : M.comp_unit) : prog Diag.result =
   Diag.(

@@ -1,4 +1,4 @@
-import "lib/array.vpr"
+import "viper_lib/array.vpr"
 field $message_async: Int
 define $Perm($Self) ((((true && acc(($Self).claimed,write)) && acc(($Self).count,write)) && 
   acc(($Self).$message_async,write)))
