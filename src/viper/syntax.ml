@@ -96,4 +96,5 @@ and typ' =
   | BoolT
   | RefT
   | ArrayT
+  | UnitT
 

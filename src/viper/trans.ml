@@ -367,13 +367,15 @@ and dec ctxt d =
      (* TODO: translate e? *)
     { ctxt with ids = Env.add x.it (Local, e.note.M.note_typ) ctxt.ids },
     fun ctxt' ->
-      ([ !!(id x, tr_typ e.note.M.note_typ) ],
-       assign_stmts ctxt' d.at (id x) e)
+      let {it=(pars, stmts);_} = assign_stmts ctxt' d.at (id x) Local e ~init:true in
+      (pars @ [ !!(id x, tr_typ e.note.M.note_typ) ],
+       stmts)
   | M.(LetD ({it=VarP x;_}, e, None)) ->
      { ctxt with ids = Env.add x.it (Local, e.note.M.note_typ) ctxt.ids },
      fun ctxt' ->
-       ([ !!(id x, tr_typ e.note.M.note_typ) ],
-        assign_stmts ctxt' d.at (id x) e)
+      let {it=(pars, stmts);_} = assign_stmts ctxt' d.at (id x) Local e ~init:true in
+      (pars @ [ !!(id x, tr_typ e.note.M.note_typ) ],
+       stmts)
   | M.(ExpD e) -> (* TODO: restrict to e of unit type? *)
      (ctxt,
       fun ctxt' ->
@@ -460,27 +462,9 @@ and stmt ctxt (s : M.exp) : seqn =
      !!([],
         [ !!(WhileS(exp ctxt e, invs''', stmt ctxt s1')) ])
 
-  (* TODO: remove by Motoko->Motoko transformation *)
-  | M.(AssignE({it = VarE x; _}, {it = ArrayE (mut, es); note={note_typ=typ; _}; _})) ->
-     let typ' = tr_typ typ in
-     let temp_id = fresh_id (fresh_id (id x).it) in
-     let lhs = !!(LocalVar (!!temp_id, typ')) in
-     !! ([!!(!!temp_id, typ')],
-         array_alloc s.at ctxt lhs (array_elem_t typ) es
-         @ [!!(VarAssignS (id x, !!(LocalVar (!!temp_id, typ'))))])
-
-  | M.(AssignE({it = VarE x; _}, e2)) ->
-     begin match fst (Env.find x.it ctxt.ids) with
-     | Local ->
-        let loc = !!! (x.at) (x.it) in
-        !!([], assign_stmts ctxt s.at loc e2)
-     | Field ->
-       let fld = (self ctxt x.at, id x) in
-       !!([],
-          [ !!(FieldAssignS(fld, exp ctxt e2)) ])
-     | _ ->
-        unsupported s.at (Arrange.exp s)
-     end
+  | M.(AssignE({it = VarE x; note={note_typ=typ;_};_}, e2)) ->
+     let sort = fst (Env.find x.it ctxt.ids) in
+     assign_stmts ctxt s.at (id x) sort e2
   | M.(AssignE({it = IdxE (e1, e2);_}, e3)) ->
      !!([],
         [!!(FieldAssignS (array_loc ctxt s.at e1 e2 e3.note.M.note_typ, exp ctxt e3))])
@@ -505,26 +489,47 @@ and stmt ctxt (s : M.exp) : seqn =
        let self_var = self ctxt m.at in
        self_var :: call_args ctxt args))])
   | M.RetE e ->
-     !!([],
-        assign_stmts ctxt s.at (!!! (Source.no_region) "$Res") e
-        @ [ !!(GotoS(!!! (Source.no_region) "$Ret")) ])
+     let at = Source.no_region in
+     let {it=(ds, stmts);_} = assign_stmts ctxt s.at (!!! at "$Res") Local e ~init:true in
+     !!(ds, stmts @ [!!(GotoS (!!! at "$Ret"))])
   | _ ->
      unsupported s.at (Arrange.exp s)
 
-and assign_stmts ctxt at x e =
+(* translate [x := e] and initialization *)
+and assign_stmts ctxt at  ?(init=false) x sort_x e : seqn =
   let (!!) p = !!! at p in
-  match e with
-  | M.({it=TupE [];_}) -> []
-  | M.({it=AnnotE (e, _);_}) -> assign_stmts ctxt at x e
-  | M.({it = CallE({it = VarE m; _}, inst, args); _}) ->
-    [ !!(MethodCallS ([x], id m,
-          let self_var = self ctxt m.at in
-          self_var :: call_args ctxt args)) ]
-  | M.({it=ArrayE(mut, es); note; _}) ->
-      let t = note.M.note_typ in
-      let lhs = !!(LocalVar (x, tr_typ t)) in
-      array_alloc at ctxt lhs (array_elem_t t) es
-  | _ -> [ !!(VarAssignS(x, exp ctxt e)) ]
+  let typ = e.note.M.note_typ in
+  let typ' = tr_typ typ in
+  let x' = !!(x.it) in
+  let assign_exp e = (match sort_x with
+    | Field -> let fld = (self ctxt at, x') in
+               [!!(FieldAssignS (fld, e))]
+    | Local -> [!!(VarAssignS (x', e))]
+    | _ -> failwith "Logic Error") in
+  (* preparation if assignment will be translated into in-place allocation  *)
+  let lhs = (match sort_x with
+             | Field -> !!(FldAcc (self ctxt at, x'))
+             | _     -> !!(LocalVar (x, typ'))) in
+  (* preparation if temp var is needed *)
+  let temp_id = !!(fresh_id "$t") in
+  let temp_var = temp_id, [!!(temp_id, typ')], assign_exp !!(LocalVar (temp_id, typ')) in
+  let rec assign_stmts' ctxt at x e =
+    let (!!) p = !!! at p in
+    match e with
+    | M.({it=TupE [];_})       -> [], []
+    | M.({it=AnnotE (e, _);_}) -> assign_stmts' ctxt at x e
+    | M.({it = CallE({it = VarE m; _}, inst, args); _}) ->
+       let x, pars, stmts = (match sort_x with | Field -> temp_var | _ -> x, [], []) in
+       pars, [ !!(MethodCallS ([x], id m,
+                         let self_var = self ctxt m.at in
+                         self_var :: call_args ctxt args)) ] @ stmts
+    (* make allocation *)
+    | M.({it=ArrayE(mut, es); note; _}) ->
+       let x, pars, stmts = if init then x, [], [] else temp_var in (* optimization *)
+       pars, (array_alloc at ctxt lhs (array_elem_t typ) es) @ stmts
+    (* simple expression assignment *)
+    | _ -> [], assign_exp (exp ctxt e)
+  in !!(assign_stmts' ctxt at x e)
 
 and call_args ctxt e =
   match e with
@@ -617,6 +622,7 @@ and tr_typ' typ =
   | T.Prim T.Nat -> IntT    (* Viper has no native support for Nat, so translate to Int *)
   | T.Prim T.Bool -> BoolT
   | T.Array _ -> ArrayT     (* Viper arrays are not parameterised by element type *)
+  | T.Tup   _ -> UnitT      (* TODO *)
   | t -> unsupported Source.no_region (Mo_types.Arrange_type.typ t)
 
 and array_elem_t t =
@@ -640,6 +646,8 @@ and array_acc at lhs t =
   | T.Mut _-> arrayAccE at lhs (array_field t) FullP
   | _      -> arrayAccE at lhs (array_field t) WildcardP
 
+(* allocate array on lhs expression
+   Note: double allocation on same lhs leads to inconsistency *)
 and array_alloc at ctxt lhs t es : stmt list =
   let (!!) p = !!! at p in
   let init_array = List.mapi (fun i e ->

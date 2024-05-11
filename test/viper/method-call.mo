@@ -1,4 +1,6 @@
 actor MethodCall {
+  var boolFld: Bool = false;
+
   func ignoreBool(_b : Bool) : () {
   };
 
@@ -16,7 +18,8 @@ actor MethodCall {
     ignoreBool(b);        // standalone method call
     let c1 = idBool(b);   // method call in let-declaration
     var c2 = idBool(b);   // method call in var-declaration
-    c2 := idBool(c2);     // method call in assignment
+    c2 := idBool(c2);     // method call in local var assignment
+    boolFld := idBool(c2); // method call in field assignment
     if (c1 and c2) {
       return idInt(tru);  // method call in return statement
     };
