@@ -98,3 +98,14 @@ and typ' =
   | ArrayT
   | UnitT
 
+(* Helpers *)
+let seqn_merge s1 s2 : seqn =
+  Source.{ it=(fst s1.it @ fst s2.it, snd s1.it @ snd s2.it);
+           at=Source.span s1.at s2.at;
+           note=s1.note (* NOTE: it could be too implicit *)
+  }
+let seqn_concat = function
+  | []    -> Source.{it=([], []); at=Source.no_region; note=NoInfo}
+  | s::[] -> s
+  | s::ss -> List.fold_left seqn_merge s ss
+

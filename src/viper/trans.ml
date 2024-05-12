@@ -79,7 +79,7 @@ type ctxt =
   { self : string option;
     ids : (sort * T.t) T.Env.t;
     ghost_items : (ctxt -> item) list ref;
-    ghost_inits : (ctxt -> stmt list) list ref;
+    ghost_inits : (ctxt -> seqn) list ref;
     ghost_perms : (ctxt -> Source.region -> exp) list ref;
     ghost_conc : (ctxt -> exp -> exp) list ref;
   }
@@ -160,9 +160,10 @@ and unit' (u : M.comp_unit) : prog =
          (perms @ !(ctxt.ghost_perms))
     in
     (* Add initializer *)
-    let init_list = List.concat_map (fun mk_s -> mk_s ctxt'') (inits @ !(ctxt.ghost_inits)) in
+    let init_list =
+      seqn_concat (List.map (fun mk_s -> mk_s ctxt'') (inits @ !(ctxt.ghost_inits))) in
     let init_body =
-      !!! (body.at) ([], init_list)(* ATG: Is this the correct position? *)
+      !!! (body.at) init_list.it (* ATG: Is this the correct position? *)
     in
     let init_m =
       (^^^) (body.at) (MethodI(init_id, [self_id, self_typ], [], [], [], Some init_body)) ActorInit
@@ -232,30 +233,14 @@ and dec_field ctxt d =
       let (i, info) = mk_i ctxt' in
       (^^^) (d.at) i info)
 
+and static_invariants at lhs e =
+  match e. it with
+ | M.AnnotE (e, _) -> static_invariants at lhs e
+ | M.ArrayE (_, es) -> [array_size_inv at lhs (List.length es)]
+ | _ -> []
+
 and dec_field' ctxt d =
   match d.M.dec.it with
-  | M.VarD (x, {it=M.AnnotE ({it=M.ArrayE (mut, es); note;_}, _); at=e_at;_}) ->
-      let lhs = fun ctxt' -> !!! Source.no_region (FldAcc (self ctxt' e_at, id x)) in
-      let t = note.M.note_typ in
-      { ctxt with ids = Env.add x.it (Field, t) ctxt.ids },
-      Some (fun ctxt' at -> (* perm *)
-              !!! at (AndE (accE at (self ctxt' at, id x),
-                      !!! at (AndE (array_acc at (lhs ctxt') (T.Mut (array_elem_t t)),
-                                    array_size_inv at ctxt' (lhs ctxt')  (List.length es)))))),
-      Some (fun ctxt' -> (* init *)
-          array_alloc e_at ctxt' (lhs ctxt') (array_elem_t t) es),
-      (fun ctxt' ->
-        (FieldI(id x, tr_typ t),
-        NoInfo))
-  | M.VarD (x, e) ->
-      { ctxt with ids = Env.add x.it (Field, e.note.M.note_typ) ctxt.ids },
-      Some(fun ctxt' (at : region) -> (accE at (self ctxt' at, id x))),
-      Some(fun ctxt' ->
-        [!!! { left = x.at.left; right = e.at.right }
-          (FieldAssignS((self ctxt' e.at, id x), exp ctxt' e))]),
-      fun ctxt' ->
-        (FieldI(id x, tr_typ e.note.M.note_typ),
-        NoInfo)
   (* async functions *)
   | M.(LetD ({it=VarP f;note;_},
              {it=FuncE(x, sp, tp, p, t_opt, sugar,
@@ -310,6 +295,24 @@ and dec_field' ctxt d =
         let stmts'' = stmts' @ [!!! Source.no_region (LabelS(!!! (Source.no_region) "$Ret"))] in
         (MethodI(id f, (self_id, !!! Source.no_region RefT)::method_args', ret, pres, posts, Some { stmts with it = fst stmts.it, stmts'' } ),
         PrivateFunction f.it)
+  (* Fields *)
+  | M.LetD ({it=M.VarP x;_}, e, None)
+  | M.VarD (x, e) ->
+     let e_t = e.note.M.note_typ in
+     let lhs = fun ctxt' -> !!! Source.no_region (FldAcc (self ctxt' e.at, id x)) in
+     let perms ctxt' at =
+       conjoin ([ accE at (self ctxt' at, id x) ]
+                @ (access_pred (lhs ctxt') e_t |: [])
+                @ (static_invariants at (lhs ctxt') e)) at in
+      { ctxt with ids = Env.add x.it (Field, e_t) ctxt.ids },
+      Some(perms), (* perm *)
+      Some(fun ctxt' -> (* init *)
+              let at = { left = x.at.left; right = e.at.right } in
+              assign_stmts ctxt' at (id x) Field e ~init:true),
+      fun ctxt' ->
+        (FieldI(id x, tr_typ e_t),
+        NoInfo)
+  (* Invariants *)
   | M.(ExpD { it = AssertE (Invariant, e); at; _ }) ->
       ctxt,
       None, (* no perm *)
@@ -330,17 +333,17 @@ and arg p = match p.it with
         | _ -> unsupported p.at (Arrange.pat p))
   | _ -> unsupported p.at (Arrange.pat p)
 
-and access_pred x t =
-  let lhs = !!! Source.no_region (LocalVar (id x, tr_typ t)) in
+and access_pred lhs t =
   match T.normalize t with
   | T.Array elem_t -> Some (array_acc Source.no_region lhs elem_t)
   | _ -> None
+(* get access predicate for all local variables in current scope *)
 and local_access_preds ctxt =
+  let (!!) p = !!! Source.no_region p in
   let preds = Env.fold (fun id info preds ->
-      let id' = {it=id; at=Source.no_region; note=()} in
       match info with
-      | (Local, t) -> access_pred id' t |: preds
-      | _ -> preds)
+      | (Local, t) -> access_pred !!(LocalVar (!!id, tr_typ t)) t |: preds
+      | _          -> preds)
     ctxt.ids []
   in preds
 
@@ -403,10 +406,9 @@ and stmt ctxt (s : M.exp) : seqn =
          !!(FieldI (!!id, !!IntT))) ::
        !(ctxt.ghost_items);
      let mk_s = fun ctxt ->
-       [!!! at
-         (FieldAssignS (
-            (self  ctxt s.at, !!id),
-            intLitE (s.at) 0))]
+       !@ ([], [!@(FieldAssignS (
+                     (self  ctxt s.at, !!id),
+                     intLitE (s.at) 0))])
      in
      ctxt.ghost_inits := mk_s :: !(ctxt.ghost_inits);
      let mk_p = fun ctxt at ->
@@ -606,8 +608,9 @@ and rets t_opt =
      | T.Tup [] -> [], []
      | T.Async (T.Fut, _, _) -> [], []
      | typ ->
-        let pred = access_pred {it="$Res"; at=Source.no_region; note=()} typ in
-        pred |: [], [(!!! (Source.no_region) "$Res", tr_typ  typ)]
+        let (!!) p = !!! Source.no_region p in
+        let pred = access_pred !!(LocalVar (!!"$Res", tr_typ typ)) typ in
+        pred |: [], [(!!"$Res", tr_typ  typ)]
     )
 
 and id id = { it = id.it; at = id.at; note = NoInfo }
@@ -638,7 +641,7 @@ and array_field t =
   | T.Prim T.Bool -> "$bool"
   | _ -> unsupported Source.no_region (Mo_types.Arrange_type.typ t)
 
-and array_size_inv at ctxt lhs n =
+and array_size_inv at lhs n =
   !!! at (EqCmpE (sizeE at lhs, intLitE at n))
 
 and array_acc at lhs t =
@@ -658,7 +661,7 @@ and array_alloc at ctxt lhs t es : stmt list =
      | T.Mut _ -> []
      | _       -> [ExhaleS (array_acc at lhs t); InhaleS (array_acc at lhs t)])in
   let stmts = [ InhaleS (array_acc at lhs (T.Mut t))
-              ; InhaleS (array_size_inv at ctxt lhs (List.length es))]
+              ; InhaleS (array_size_inv at lhs (List.length es))]
               @ init_array
               @ reset_perm
   in List.map (!!) stmts

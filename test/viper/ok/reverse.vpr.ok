@@ -15,10 +15,10 @@ field $ref: Ref
 field $array: Array
 /* END PRELUDE */
 
-define $Perm($Self) ((true && (acc(($Self).xarray,write) && ($array_acc(
+define $Perm($Self) ((true && ((acc(($Self).xarray,write) && $array_acc(
                                                              ($Self).xarray,
-                                                             $int, write) && (
-  $size(($Self).xarray) == 5)))))
+                                                             $int, write)) && (
+  $size(($Self).xarray) == 5))))
 define $Inv($Self) (true)
 method __init__($Self: Ref)
     

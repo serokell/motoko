@@ -15,10 +15,13 @@ field $ref: Ref
 field $array: Array
 /* END PRELUDE */
 
-define $Perm($Self) ((((true && (acc(($Self).arr,write) && ($array_acc(
-                                                            ($Self).arr,
-                                                            $int, write) && (
-  $size(($Self).arr) == 2)))) && acc(($Self).f,write)) && acc(($Self).count,write)))
+define $Perm($Self) (((((true && ((acc(($Self).arr2,write) && $array_acc(
+                                                              ($Self).arr2,
+                                                              $int, wildcard)) && (
+  $size(($Self).arr2) == 1))) && ((acc(($Self).arr,write) && $array_acc(
+                                                             ($Self).arr,
+                                                             $int, write)) && (
+  $size(($Self).arr) == 2))) && acc(($Self).f,write)) && acc(($Self).count,write)))
 define $Inv($Self) (true)
 method __init__($Self: Ref)
     
@@ -26,6 +29,11 @@ method __init__($Self: Ref)
     ensures $Perm($Self)
     ensures $Inv($Self)
     { 
+      inhale $array_acc(($Self).arr2, $int, write);
+      inhale ($size(($Self).arr2) == 1);
+      ($loc(($Self).arr2, 0)).$int := 42;
+      exhale $array_acc(($Self).arr2, $int, wildcard);
+      inhale $array_acc(($Self).arr2, $int, wildcard);
       inhale $array_acc(($Self).arr, $int, write);
       inhale ($size(($Self).arr) == 2);
       ($loc(($Self).arr, 0)).$int := 1;
@@ -33,6 +41,7 @@ method __init__($Self: Ref)
       ($Self).f := 2;
       ($Self).count := 42; 
     }
+field arr2: Array
 field arr: Array
 field f: Int
 field count: Int
@@ -182,6 +191,22 @@ method len($Self: Ref)
     ensures $Inv($Self)
     { 
       $Res := $size(($Self).arr);
+      goto $Ret;
+      label $Ret; 
+    }
+method reset($Self: Ref)
+     returns ($Res: Int)
+    requires $Perm($Self)
+    requires $Inv($Self)
+    ensures $Perm($Self)
+    ensures $Inv($Self)
+    { var $t_40: Array
+      inhale $array_acc(($Self).arr, $int, write);
+      inhale ($size(($Self).arr) == 2);
+      ($loc(($Self).arr, 0)).$int := 0;
+      ($loc(($Self).arr, 1)).$int := 0;
+      ($Self).arr := $t_40;
+      $Res := 0;
       goto $Ret;
       label $Ret; 
     }
