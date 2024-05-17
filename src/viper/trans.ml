@@ -394,13 +394,11 @@ and dec ctxt d =
       let d = !!(id x, tr_typ e.note.M.note_typ) in
       let ds, stmts = assign_stmts ctxt' d.at lval e in
       (d :: ds, stmts)
-  | M.(LetD ({it=VarP x;_}, e, None)) ->
-     { ctxt with ids = Env.add x.it (Local, e.note.M.note_typ) ctxt.ids },
-     fun ctxt' ->
-        let lval = LValueUninitVar (id x) in
-        let d = !!(id x, tr_typ e.note.M.note_typ) in
-        let ds, stmts = assign_stmts ctxt' d.at lval e in
-       (d :: ds, stmts)
+  | M.(LetD (p, e, None)) ->
+    let add_pat_id (x, t) = Env.add x.it (Local, t) in
+    { ctxt with ids = List.fold_right add_pat_id (pat_ids p) ctxt.ids },
+    fun ctxt' ->
+    pat_match "$p" p (fun (lval, _) -> assign_stmts ctxt' d.at lval e)
   | M.(ExpD e) -> (* TODO: restrict to e of unit type? *)
      (ctxt,
       fun ctxt' ->
@@ -408,6 +406,51 @@ and dec ctxt d =
         s.it)
   | _ ->
      unsupported d.at (Arrange.dec d)
+
+and pat_ids (p : M.pat) : (id * T.typ) list =
+  match p.it with
+  | M.VarP x  -> [(id x, p.note)]
+  | M.LitP _  -> []
+  | M.ParP p' -> pat_ids p'
+  | M.TupP ps -> List.concat_map pat_ids ps
+  | _         -> unsupported p.at (Arrange.pat p)
+
+(*
+  s: template string for a temporary variable (if needed)
+  p: pattern for matching
+  mk_seqn: given a typed lvalue that represents the pattern as a whole,
+           generate a seqn' that declares and initializes it
+  result: a seqn' that declares and initializes all pat_ids
+*)
+and pat_match (s : string) (p : M.pat) (mk_seqn : (lvalue * T.typ) -> seqn') : seqn' =
+  let (!!) x = !!! (p.at) x in
+  match p.it with
+  | M.ParP p' -> pat_match s p' mk_seqn
+  | M.VarP x  ->
+      let t = p.note in
+      let d = !!(id x, tr_typ t) in
+      let ds, stmts = mk_seqn (LValueUninitVar (id x), t) in
+      d :: ds, stmts
+  | M.TupP ps ->
+      let tmp_id = !!(fresh_id s) in
+      let tmp_typ = p.note in
+      let tmp_e = !!(LocalVar (tmp_id, tr_typ tmp_typ)) in
+      let tmp_d = !!(tmp_id, tr_typ tmp_typ) in
+      let tup_prj_s i = (s ^ "_" ^ string_of_int i) in
+      let tup_prj_assign_stmt i lval t = begin
+        let e = !!(FldAcc (prjE (p.at) tmp_e (intLitE p.at i) (typed_field t))) in
+        !!(assign_stmt lval e)
+      end in
+      let init_acc = mk_seqn (LValueUninitVar tmp_id, tmp_typ) in
+      let extend_acc acc (i, p') = begin
+        pat_match (tup_prj_s i) p' (fun (lval, t) ->
+          let ds, stmts = acc in
+          ds, stmts @ [tup_prj_assign_stmt i lval t])
+      end in
+      let ips = List.mapi (fun i p' -> i, p') ps in
+      let ds, stmts = List.fold_left extend_acc init_acc ips in
+      tmp_d :: ds, stmts
+  | _ -> unsupported p.at (Arrange.pat p)
 
 and stmt ctxt (s : M.exp) : seqn =
   let (!!) p = !!! (s.at) p in

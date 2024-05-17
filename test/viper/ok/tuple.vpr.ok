@@ -175,8 +175,15 @@ method callTuple($Self: Ref)
     requires $Perm($Self)
     ensures $Perm($Self)
     { var t: Tuple
+      var $p: Tuple
+      var b: Bool
+      var a: Int
       t := getTuple($Self);
       assume ((($prj(t, 0)).$int == 42) && (($prj(t, 1)).$bool == false));
+      $p := getTuple($Self);
+      a := ($prj($p, 0)).$int;
+      b := ($prj($p, 1)).$bool;
+      assume ((a == 42) && (b == false));
       label $Ret; 
     }
 method changeField($Self: Ref)
