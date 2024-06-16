@@ -57,12 +57,12 @@ field $option_int: Option[Int]
 field $option_bool: Option[Bool]
 field $option_array: Option[Array]|prelude}
 
-let prelude (tuple_arities : IntSet.t): string =
+let prelude reqs : string =
   String.concat "\n"
   [
     "/* BEGIN PRELUDE */";
     prelude_array_encoding;
-    prelude_tuple_encoding tuple_arities;
+    prelude_tuple_encoding reqs.tuple_arities;
     prelude_option_encoding;
     prelude_typed_references;
     "/* END PRELUDE */"

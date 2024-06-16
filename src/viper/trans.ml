@@ -2,6 +2,7 @@ open Source
 
 open Common
 open Syntax
+open Traversals
 
 module T = Mo_types.Type
 module M = Mo_def.Syntax
@@ -1059,3 +1060,51 @@ and label_expr_alloc ~label_id ~label_type ~label_rhs ~label_note at ctxt lhs : 
   let label = M.{ it = LabelE (label_id, label_type, label_rhs); at; note = label_note } in
   let label_tr = stmt ctxt label in
   label_tr.it
+
+let collect_typ_reqs tuple_arities =
+  let rec collect (t : T.typ) =
+    begin match T.normalize t with
+    | T.Tup ts ->
+        tuple_arities := IntSet.add (List.length ts) !tuple_arities;
+        let _ = List.map collect ts in ()
+    | T.Array t' -> collect t'
+    | T.Opt t' -> collect t'
+    | T.Con (_, ts) -> let _ = List.map collect ts in ()
+    | _ -> ()
+    end
+  in collect
+
+let collect_reqs (u : M.comp_unit) : reqs =
+  let tuple_arities = ref IntSet.empty in
+  let { M.imports; M.body } = u.it in
+  begin match body.it with
+  | M.ActorU(_, decs) ->
+    let visitor = {
+      visit_exp = (fun e ->
+        match e.it with
+        | M.TupE es ->
+            let n = List.length es in
+            tuple_arities := IntSet.add n !tuple_arities;
+            e
+        | M.ProjE(e', i) ->
+            let n = List.length (tuple_elem_ts e'.note.M.note_typ) in
+            tuple_arities := IntSet.add n !tuple_arities;
+            e
+        | _ -> e);
+      visit_typ = (fun t ->
+        collect_typ_reqs tuple_arities t.note;
+        t);
+      visit_pat = (fun p ->
+        match p.it with
+        | M.TupP ps ->
+            let n = List.length ps in
+            tuple_arities := IntSet.add n !tuple_arities;
+            p
+        | _ -> p);
+      visit_dec = (fun d -> d);
+      visit_inst = (fun i -> i);
+    } in
+    let _ = List.map (over_dec_field visitor) decs in ()
+  | _ -> ()
+  end;
+  { tuple_arities = !tuple_arities }
