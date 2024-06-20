@@ -19,7 +19,7 @@ module S = Set.Make(String)
 type avl = Available | Unavailable
 
 type lab_env = T.typ T.Env.t
-type ret_env = T.typ option
+type ret_env = T.typ list
 type val_env  = (T.typ * Source.region * Scope.val_kind * avl) T.Env.t
 
 (* separate maps for values and types; entries only for _public_ elements *)
@@ -65,7 +65,7 @@ let env_of_scope ?(viper_mode=false) msgs scope =
     cons = scope.Scope.con_env;
     objs = T.Env.empty;
     labs = T.Env.empty;
-    rets = None;
+    rets = [];
     async = Async_cap.NullCap;
     in_actor = false;
     in_prog = true;
@@ -1142,9 +1142,9 @@ and infer_exp'' env exp : T.typ =
       error env id.at "M0057" "unbound variable %s" id.it
     )
   | ResVarE ->
-    (match env.rets with
-    | Some t -> t
-    | None ->
+    (match List.rev env.rets with
+    | t :: _ -> t
+    | [] ->
       error env exp.at "M0085" "misplaced var:return")
   | LitE lit ->
     T.Prim (infer_lit env lit exp.at)
@@ -1440,7 +1440,7 @@ and infer_exp'' env exp : T.typ =
       let env'' =
         { env' with
           labs = T.Env.empty;
-          rets = Some codom;
+          rets = codom :: env'.rets;
           (* async = None; *) }
       in
       let initial_usage = enter_scope env'' in
@@ -1585,11 +1585,11 @@ and infer_exp'' env exp : T.typ =
   | RetE exp1 ->
     if not env.pre then begin
       match env.rets with
-      | Some T.Pre ->
+      | T.Pre :: _ ->
         local_error env exp.at "M0084" "cannot infer return type"
-      | Some t ->
+      | t :: _ ->
         check_exp_strong env t exp1
-      | None ->
+      | [] ->
         local_error env exp.at "M0085" "misplaced return"
     end;
     T.Non
@@ -1605,10 +1605,11 @@ and infer_exp'' env exp : T.typ =
     let t1, next_cap = check_AsyncCap env "async expression" exp.at in
     let c, tb, ce, cs = check_typ_bind env typ_bind in
     let ce_scope = T.Env.add T.default_scope_var c ce in (* pun scope var with c *)
+    let env = adjoin_typs env ce_scope cs in
     let env' =
-      {(adjoin_typs env ce_scope cs) with
+      {env with
         labs = T.Env.empty;
-        rets = Some T.Pre;
+        rets = T.Pre :: env.rets;
         async = next_cap c;
         scopes = T.ConEnv.add c exp.at env.scopes } in
     let t = infer_exp env' exp1 in
@@ -1800,10 +1801,11 @@ and check_exp' env0 t exp : T.typ =
     end;
     let c, tb, ce, cs = check_typ_bind env tb in
     let ce_scope = T.Env.add T.default_scope_var c ce in (* pun scope var with c *)
+    let env = adjoin_typs env ce_scope cs in
     let env' =
-      {(adjoin_typs env ce_scope cs) with
+      {env with
         labs = T.Env.empty;
-        rets = Some t';
+        rets = t' :: env.rets;
         async = next_cap c;
         scopes = T.ConEnv.add c exp.at env.scopes;
       } in
@@ -1854,7 +1856,7 @@ and check_exp' env0 t exp : T.typ =
     let env' =
       { env with
         labs = T.Env.empty;
-        rets = Some t2;
+        rets = t2 :: env.rets;
         async = C.NullCap; }
     in
     check_exp_strong (adjoin_vals env' ve2) t2 exp;
@@ -2392,7 +2394,7 @@ and infer_obj env s dec_fields at : T.typ =
       { env with
         in_actor = true;
         labs = T.Env.empty;
-        rets = None;
+        rets = [];
       }
   in
   let decs = List.map (fun (df : dec_field) -> df.it.dec) dec_fields in
@@ -2586,7 +2588,7 @@ and infer_dec env dec : T.typ =
       let env''' =
         { (add_val env'' self_id self_typ) with
           labs = T.Env.empty;
-          rets = None;
+          rets = [];
           async = async_cap;
           in_actor;
         }
@@ -2822,7 +2824,7 @@ and infer_dec_typdecs env dec : Scope.t =
     let env'' =
      { (add_val (adjoin_vals env' ve) self_id self_typ) with
           labs = T.Env.empty;
-          rets = None;
+          rets = [];
           async = async_cap;
           in_actor}
     in
