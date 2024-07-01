@@ -407,8 +407,8 @@ and dec_field' ctxt d =
         in
         let stmts = stmt ctxt e in
         let _, stmts = extract_concurrency stmts in
-        let pres, stmts' = List.partition_map (function { it = PreconditionS exp; _ } -> Left exp | s -> Right s) (snd stmts.it) in
-        let posts, stmts' = List.partition_map (function { it = PostconditionS exp; _ } -> Left exp | s -> Right s) stmts' in
+        let pres, stmts' = List.partition_map (function { it = PreconditionS exp; at; _ } -> Left { exp with at } | s -> Right s) (snd stmts.it) in
+        let posts, stmts' = List.partition_map (function { it = PostconditionS exp; at; _ } -> Left { exp with at } | s -> Right s) stmts' in
         let arg_preds = local_access_preds ctxt in
         let ret_preds, ret = rets ctxt t_opt in
         let pres = arg_preds @ pres in
@@ -434,8 +434,8 @@ and dec_field' ctxt d =
         in
         let stmts = stmt ctxt e in
         let _, stmts = extract_concurrency stmts in
-        let pres, stmts' = List.partition_map (function { it = PreconditionS exp; _ } -> Left exp | s -> Right s) (snd stmts.it) in
-        let posts, stmts' = List.partition_map (function { it = PostconditionS exp; _ } -> Left exp | s -> Right s) stmts' in
+        let pres, stmts' = List.partition_map (function { it = PreconditionS exp; at; _ } -> Left { exp with at } | s -> Right s) (snd stmts.it) in
+        let posts, stmts' = List.partition_map (function { it = PostconditionS exp; at; _ } -> Left { exp with at } | s -> Right s) stmts' in
         let arg_preds = local_access_preds ctxt in
         let ret_preds, ret = rets ctxt t_opt in
         let pres = arg_preds @ pres in
@@ -562,7 +562,7 @@ and compile_while
       let label, ctxt = loop_label ctxt label_id in
       let stmts = stmt ctxt body in
       let decls, stmts = stmts.it in
-      !!(decls, !!(LabelS label) :: stmts)
+      !!(decls, stmts @ [ !!(LabelS label) ])
     | None -> stmt ctxt body
   in
   !!([], [ !!(WhileS(pred, invs, body)) ])
