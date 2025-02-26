@@ -34,15 +34,15 @@ let diagnostics_of_msgs (msgs : Diag.message list) =
 let rec js_of_sexpr (sexpr : Wasm.Sexpr.sexpr) : Js.Unsafe.any =
   (* generate a JSON-serializable value tree from an s-expression *)
   match sexpr with
-| Wasm.Sexpr.Node (head, inner) ->
-  Js.Unsafe.coerce (object%js
-    val name = Js.string head
-    val args = inner |> List.map js_of_sexpr |> Array.of_list |> Js.array |> Js.some
-  end)
-| Wasm.Sexpr.Atom s ->
-  Js.Unsafe.coerce (Js.string s)
+  | Wasm.Sexpr.Node (head, inner) ->
+    Js.Unsafe.coerce (object%js
+      val name = Js.string head
+      val args = inner |> List.map js_of_sexpr |> Array.of_list |> Js.array |> Js.some
+    end)
+  | Wasm.Sexpr.Atom s ->
+    Js.Unsafe.coerce (Js.string s)
 
-let js_result (result : 'a Diag.result) (wrap_code: 'a -> 'b) =
+let js_result (result : 'a Diag.result) (wrap_code: 'a -> 'b Js.opt) =
   match result with
   | Ok (code, msgs) ->
      object%js
@@ -58,14 +58,14 @@ let js_result (result : 'a Diag.result) (wrap_code: 'a -> 'b) =
 let js_version = Js.string Source_id.id
 
 let js_check source =
-  Mo_types.Cons.session (fun _ -> 
+  Mo_types.Cons.session (fun _ ->
     js_result (Pipeline.check_files [Js.to_string source]) (fun _ -> Js.null))
 
 let js_set_run_step_limit limit =
   Mo_interpreter.Interpret.step_limit := limit
 
 let js_run list source =
-  Mo_types.Cons.session (fun _ -> 
+  Mo_types.Cons.session (fun _ ->
     let list = Js.to_array list |> Array.to_list |> List.map Js.to_string in
     match Pipeline.run_stdin_from_file list (Js.to_string source) with
     | Some v ->
@@ -81,7 +81,7 @@ let js_run list source =
       end)
 
 let js_viper filenames =
-  Mo_types.Cons.session (fun _ -> 
+  Mo_types.Cons.session (fun _ ->
     let result = Pipeline.viper_files (Js.to_array filenames |> Array.to_list |> List.map Js.to_string) in
     js_result result (fun (viper, lookup) ->
       let js_viper = Js.string viper in
@@ -101,7 +101,7 @@ let js_viper filenames =
       end)))
 
 let js_candid source =
-  Mo_types.Cons.session (fun _ -> 
+  Mo_types.Cons.session (fun _ ->
     js_result (Pipeline.generate_idl [Js.to_string source])
       (fun prog ->
         let open Idllib in
@@ -157,25 +157,41 @@ let js_parse_motoko s =
     end)
     in Js.some (js_of_sexpr (Arrange.prog prog)))
 
+let js_parse_prog prog =
+  let open Mo_def in
+  let module Arrange_sources_types = Arrange.Make (struct
+    let include_sources = true
+    let include_types = true
+    let include_docs = Some prog.note.Syntax.trivia
+    let include_migration = false
+    let main_file = Some prog.at.left.file
+  end)
+  in object%js
+    val ast = js_of_sexpr (Arrange_sources_types.prog prog)
+    (* val typ = js_of_sexpr (Arrange_sources_types.typ typ) *)
+  end
+
 let js_parse_motoko_typed paths =
   let paths = paths |> Js.to_array |> Array.to_list in
   let load_result = Mo_types.Cons.session (fun _ ->
     Pipeline.load_progs Pipeline.parse_file (paths |> List.map Js.to_string) Pipeline.initial_stat_env)
   in
   js_result load_result (fun (libs, progs, senv) ->
-  progs |> List.map (fun prog ->
-    let open Mo_def in
-    let module Arrange_sources_types = Arrange.Make (struct
-      let include_sources = true
-      let include_types = true
-      let include_docs = Some prog.note.Syntax.trivia
-      let include_migration = false
-      let main_file = Some prog.at.left.file
-    end)
-    in object%js
-      val ast = js_of_sexpr (Arrange_sources_types.prog prog)
-      (* val typ = js_of_sexpr (Arrange_sources_types.typ typ) *)
-    end) |> Array.of_list |> Js.array |> Js.some)
+    progs |> List.map js_parse_prog |> Array.of_list |> Js.array |> Js.some)
+
+let js_parse_motoko_typed_lsp paths cache =
+  let paths = paths |> Js.to_array |> Array.to_list in
+  let cache = Js.Opt.get cache (fun () -> Pipeline.Rim_map.empty) in
+  let load_result = Mo_types.Cons.session (fun _ ->
+    Pipeline.lsp_load
+      Pipeline.parse_file
+      (paths |> List.map Js.to_string)
+      Pipeline.initial_stat_env
+      cache)
+  in
+  js_result load_result (fun (progs, cache) ->
+    let progs = progs |> List.map js_parse_prog |> Array.of_list |> Js.array in
+    Js.some (progs, cache))
 
 let js_save_file filename content =
   let filename = Js.to_string filename in

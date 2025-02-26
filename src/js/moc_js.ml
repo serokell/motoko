@@ -36,4 +36,5 @@ let () =
       method parseMotoko s = js_parse_motoko s
       method parseMotokoTyped paths = js_parse_motoko_typed paths
       method printDeps file = print_deps file
+      method parseMotokoTypedLsp paths = js_parse_motoko_typed_lsp paths
      end);

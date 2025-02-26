@@ -199,14 +199,19 @@ let infer_prog ?(viper_mode=false) pkg_opt senv async_cap prog : (Type.typ * Sco
   let* () = Definedness.check_prog prog in
   Diag.return t_sscope
 
+let check_prog ?(viper_mode=false) senv prog : Scope.scope Diag.result =
+  let open Diag.Syntax in
+  let async_cap = async_cap_of_prog prog in
+  let* _t, sscope = infer_prog ~viper_mode senv None async_cap prog in
+  let senv' = Scope.adjoin senv sscope in
+  Diag.return senv'
+
 let rec check_progs ?(viper_mode=false) senv progs : Scope.scope Diag.result =
   match progs with
   | [] -> Diag.return senv
   | prog::progs' ->
     let open Diag.Syntax in
-    let async_cap = async_cap_of_prog prog in
-    let* _t, sscope = infer_prog ~viper_mode senv None async_cap prog in
-    let senv' = Scope.adjoin senv sscope in
+    let* senv' = check_prog ~viper_mode senv prog in
     check_progs ~viper_mode senv' progs'
 
 let check_lib senv pkg_opt lib : Scope.scope Diag.result =
@@ -301,7 +306,7 @@ let prim_error phase (msgs : Diag.messages) =
   Diag.print_messages msgs;
   exit 1
 
-let check_prim () : Syntax.lib * stat_env =
+let lib_prim () : Syntax.lib =
   let lexer = Lexing.from_string (Prelude.prim_module ~timers:!Flags.global_timer) in
   let parse = Parser.Incremental.parse_prog in
   match parse_with Lexer.mode_priv lexer parse prim_name with
@@ -309,7 +314,6 @@ let check_prim () : Syntax.lib * stat_env =
   | Ok (prog, _ws) ->
     let open Syntax in
     let open Source in
-    let senv0 = initial_stat_env in
     (* Propagate deprecations *)
     let fs = List.map (fun d ->
       let trivia = Trivia.find_trivia prog.note.trivia d.at in
@@ -317,17 +321,17 @@ let check_prim () : Syntax.lib * stat_env =
       {vis = Public depr @@ no_region; dec = d; stab = None} @@ d.at) prog.it
     in
     let body = {it = ModuleU (None, fs); at = no_region; note = empty_typ_note} in
-    let lib = {
+    {
       it = { imports = []; body };
       at = no_region;
       note = { filename = "@prim"; trivia = Trivia.empty_triv_table }
-    } in
-    match check_lib senv0 None lib with
-    | Error es -> prim_error "checking" es
-    | Ok (sscope, _ws) ->
-      let senv1 = Scope.adjoin senv0 sscope in
-      lib, senv1
+    }
 
+let check_prim lib : stat_env =
+  let senv0 = initial_stat_env in
+  match check_lib senv0 None lib with
+  | Error es -> prim_error "checking" es
+  | Ok (sscope, _ws) -> Scope.adjoin senv0 sscope
 
 (* Imported file loading *)
 
@@ -347,7 +351,34 @@ type load_result =
 type load_decl_result =
   (Syntax.lib list * Syntax.prog * Scope.scope * Type.typ * Scope.scope) Diag.result
 
-let chase_imports parsefn senv0 imports : (Syntax.lib list * Scope.scope) Diag.result =
+module Rim_ord = struct
+  type t = Syntax.resolved_import Source.phrase
+
+  let compare left right =
+    match left.Source.it, right.Source.it with
+    | Syntax.Unresolved, Syntax.Unresolved -> 0
+    (* We compare only by path, ignoring the packages. *)
+    | Syntax.(LibPath { path = left_path; package = _left_package })
+    , Syntax.(LibPath { path = right_path; package = _right_package }) ->
+      String.compare left_path right_path
+    (* We compare only by path, ignoring the bytes. *)
+    | Syntax.IDLPath (left_path, _left_bytes)
+    , Syntax.IDLPath (right_path, _right_bytes) ->
+      String.compare left_path right_path
+    | Syntax.PrimPath, Syntax.PrimPath -> 0
+    | Syntax.Unresolved, Syntax.(LibPath _ | IDLPath  _| PrimPath)
+    | Syntax.LibPath _, Syntax.(IDLPath  _| PrimPath)
+    | Syntax.IDLPath _, Syntax.PrimPath -> -1
+    | Syntax.(LibPath _ | IDLPath _ | PrimPath), Syntax.Unresolved
+    | Syntax.(IDLPath _ | PrimPath), Syntax.LibPath _
+    | Syntax.PrimPath, Syntax.IDLPath _ -> 1
+end
+
+module Rim_map = Map.Make (Rim_ord)
+
+let chase_imports_cached parsefn senv0 imports scopes_map
+    : (Syntax.lib list * Scope.scope * Scope.t Rim_map.t) Diag.result
+  =
   (*
   This function loads and type-checkes the files given in `imports`,
   including any further dependencies.
@@ -359,74 +390,153 @@ let chase_imports parsefn senv0 imports : (Syntax.lib list * Scope.scope) Diag.r
   * To avoid duplicates, i.e. load each file at most once, we check the
     senv.
   * We accumulate the resulting libraries in reverse order, for O(1) appending.
+  * There is a cache that can be queried to avoid recomputing unchanged dependencies.
   *)
+
+  let module Rim_graph = Graph.Make (Rim_ord) in
+  let open Diag.Syntax in
+
+  (* Build a (possibly cyclic) graph of imports. This will allow us to analyze
+     whether some cached entry should be recomputed due to changed dependencies.
+
+     Also build a cache for parsed library path programs to avoid reparsing them
+     below during typechecking. *)
+  let rec build_graph (g, lib_path_progs) ri =
+    if Rim_graph.mem ri g then
+      Diag.return (g, lib_path_progs)
+    else
+      let g = Rim_graph.vertex ri g in
+      match ri.Source.it with
+      | Syntax.PrimPath | Syntax.Unresolved | Syntax.IDLPath _ ->
+        Diag.return (g, lib_path_progs)
+      | Syntax.LibPath { Syntax.path = f; package = _ } ->
+        let* prog, base = parsefn ri.Source.at f in
+        let* imports = ResolveImport.resolve (resolve_flags ()) prog base in
+        let lib_path_progs = Rim_map.add ri prog lib_path_progs in
+        let* g, lib_path_progs =
+          build_graph_from_set (g, lib_path_progs) imports
+        in
+        Diag.return (Rim_graph.from_assocs [ (ri, imports) ] g, lib_path_progs)
+  and build_graph_from_set acc ris = Diag.fold build_graph acc ris in
+  let* dependencies, lib_path_progs =
+    build_graph_from_set (Rim_graph.empty, Rim_map.empty) imports
+  in
+  let not_found () = failwith "Import not found in graph" in
+  let invalid =
+    let dependents = Rim_graph.transpose dependencies in
+    List.fold_left
+      (fun acc ri ->
+        match Rim_graph.reachable ri dependents with
+        (* We should always find an import in the graph, otherwise it's a bug. *)
+        | None -> not_found ()
+        | Some dependents_of_ri -> Rim_graph.overlay acc dependents_of_ri)
+      Rim_graph.empty
+      imports
+  in
 
   let open ResolveImport.S in
   let pending = ref empty in
   let senv = ref senv0 in
   let libs = ref [] in
+  let cache = ref scopes_map in
 
-  let rec go pkg_opt ri = match ri.Source.it with
+  let rec go pkg_opt ri =
+    let it = ri.Source.it in
+    let is_valid = not (Rim_graph.mem ri invalid) in
+    match it with
     | Syntax.PrimPath ->
       (* a bit of a hack, lib_env should key on resolved_import *)
       if Type.Env.mem "@prim" !senv.Scope.lib_env then
         Diag.return ()
       else
-        let lib, sscope = check_prim () in
+        let lib = lib_prim () in
+        let sscope =
+          match Rim_map.find_opt ri !cache with
+          | Some sscope when is_valid -> sscope
+          | _ -> check_prim lib
+        in
         libs := lib :: !libs; (* NB: Conceptually an append *)
         senv := Scope.adjoin !senv sscope;
+        cache := Rim_map.add ri sscope !cache;
         Diag.return ()
     | Syntax.Unresolved -> assert false
     | Syntax.(LibPath {path = f; package = lib_pkg_opt}) ->
       if Type.Env.mem f !senv.Scope.lib_env then
         Diag.return ()
-      else if mem ri.Source.it !pending then
+      else if mem it !pending then
         Diag.error
           ri.Source.at
           "M0003"
           "import"
           (Printf.sprintf "file %s must not depend on itself" f)
-      else begin
-        pending := add ri.Source.it !pending;
-        let open Diag.Syntax in
-        let* prog, base = parsefn ri.Source.at f in
-        let* () = Static.prog prog in
-        let* more_imports = ResolveImport.resolve (resolve_flags ()) prog base in
-        let cur_pkg_opt = if lib_pkg_opt <> None then lib_pkg_opt else pkg_opt in
-        let* () = go_set cur_pkg_opt more_imports in
-        let lib = lib_of_prog f prog in
-        let* sscope = check_lib !senv cur_pkg_opt lib in
-        libs := lib :: !libs; (* NB: Conceptually an append *)
-        senv := Scope.adjoin !senv sscope;
-        pending := remove ri.Source.it !pending;
-        Diag.return ()
-      end
-    | Syntax.IDLPath (f, _) ->
-      let open Diag.Syntax in
-      let* prog, idl_scope, actor_opt = Idllib.Pipeline.check_file f in
-      if actor_opt = None then
-        Diag.error
-          ri.Source.at
-          "M0004"
-          "import"
-          (Printf.sprintf "file %s does not define a service" f)
       else
-        match Mo_idl.Idl_to_mo.check_prog idl_scope actor_opt with
-        | exception Idllib.Exception.UnsupportedCandidFeature error_message ->
-          Stdlib.Error [
-            Diag.error_message
-              ri.Source.at
-              "M0153"
-              "import"
-              (Printf.sprintf "file %s uses Candid types without corresponding Motoko type" f);
-            error_message ]
-        | actor ->
-          let sscope = Scope.lib f actor in
-          senv := Scope.adjoin !senv sscope;
-          Diag.return ()
+        let prog = Rim_map.find ri lib_path_progs in
+        let lib = lib_of_prog f prog in
+        let* () =
+          match Rim_map.find_opt ri !cache with
+          | Some sscope when is_valid ->
+            senv := Scope.adjoin !senv sscope;
+            Diag.return ()
+          | _ ->
+            pending := add it !pending;
+            let* () = Static.prog prog in
+            let more_imports =
+              match Rim_graph.post ri dependencies with
+              | None -> not_found ()
+              | Some more_imports -> more_imports
+            in
+            let cur_pkg_opt =
+              if lib_pkg_opt <> None then lib_pkg_opt else pkg_opt
+            in
+            let* () = go_set cur_pkg_opt more_imports in
+            let* sscope = check_lib !senv cur_pkg_opt lib in
+            senv := Scope.adjoin !senv sscope;
+            cache := Rim_map.add ri sscope !cache;
+            pending := remove it !pending;
+            Diag.return ()
+        in
+        libs := lib :: !libs; (* NB: Conceptually an append *)
+        Diag.return ()
+    | Syntax.IDLPath (f, _) ->
+      match Rim_map.find_opt ri !cache with
+      | Some sscope when is_valid ->
+        senv := Scope.adjoin !senv sscope;
+        Diag.return ()
+      | _ ->
+        (* TODO: [Idllib.Pipeline.check_file] will perform a similar pipeline,
+           going recursively through imports of the IDL path to parse and
+           typecheck them. We should extend the cache system to it as well. *)
+        let* prog, idl_scope, actor_opt = Idllib.Pipeline.check_file f in
+        if actor_opt = None then
+          Diag.error
+            ri.Source.at
+            "M0004"
+            "import"
+            (Printf.sprintf "file %s does not define a service" f)
+        else
+          match Mo_idl.Idl_to_mo.check_prog idl_scope actor_opt with
+          | exception Idllib.Exception.UnsupportedCandidFeature error_message ->
+            Stdlib.Error [
+              Diag.error_message
+                ri.Source.at
+                "M0153"
+                "import"
+                (Printf.sprintf "file %s uses Candid types without corresponding Motoko type" f);
+              error_message ]
+          | actor ->
+            let sscope = Scope.lib f actor in
+            senv := Scope.adjoin !senv sscope;
+            cache := Rim_map.add ri sscope !cache;
+            Diag.return ()
   and go_set pkg_opt todo = Diag.traverse_ (go pkg_opt) todo
   in
-  Diag.map (fun () -> (List.rev !libs, !senv)) (go_set None imports)
+  Diag.map (fun () -> List.rev !libs, !senv, !cache) (go_set None imports)
+
+let chase_imports parsefn senv0 imports : (Syntax.lib list * Scope.scope) Diag.result =
+  let open Diag.Syntax in
+  let cache = Rim_map.empty in
+  let* libs, senv, _cache = chase_imports_cached parsefn senv0 imports cache in
+  Diag.return (libs, senv)
 
 let load_progs ?(viper_mode=false) ?(check_actors=false) parsefn files senv : load_result =
   let open Diag.Syntax in
@@ -688,7 +798,7 @@ let load_as_rts () =
   let rts = match (!Flags.enhanced_orthogonal_persistence, !Flags.sanity, !Flags.gc_strategy) with
     | (true, false, Flags.Incremental) -> Rts.wasm_eop_release
     | (true, true, Flags.Incremental) -> Rts.wasm_eop_debug
-    | (false, false, Flags.Copying) 
+    | (false, false, Flags.Copying)
     | (false, false, Flags.MarkCompact)
     | (false, false, Flags.Generational) -> Rts.wasm_non_incremental_release
     | (false, true, Flags.Copying)
@@ -810,3 +920,44 @@ let interpret_ir_files files =
   Option.map
     (fun (libs, progs, senv) -> interpret_ir_progs libs progs)
     (Diag.flush_messages (load_progs parse_file files initial_stat_env))
+
+type lsp_load_result = (Syntax.prog list * Scope.t Rim_map.t) Diag.result
+
+let lsp_load ?(viper_mode=false) ?(check_actors=false) parsefn files senv scopes_cache
+    : lsp_load_result =
+  let open Diag.Syntax in
+  let* parsed = Diag.traverse (parsefn Source.no_region) files in
+  let* rs = resolve_progs parsed in
+  let progs = List.map fst rs in
+  let libs = List.concat_map snd rs in
+  let* libs, senv, sscopes_rim =
+    chase_imports_cached parsefn senv libs scopes_cache
+  in
+  let* () = Typing.check_actors ~viper_mode ~check_actors senv progs in
+  let* { ResolveImport.packages; aliases = _; actor_idl_path = _ } =
+    ResolveImport.resolve_flags (resolve_flags ())
+  in
+  let* sscopes_prog =
+    Diag.fold
+      (fun acc prog ->
+        let path = prog.Source.note.Syntax.filename in
+        let rim =
+          { Source.at = Source.no_region
+          ; it =
+            Syntax.LibPath
+              { Syntax.package = Flags.M.find_opt path packages; path }
+          ; note = ()
+          }
+        in
+        match Rim_map.find_opt rim sscopes_rim with
+        | None ->
+          let* senv = check_prog ~viper_mode senv prog in
+          Diag.return (Rim_map.add rim senv acc)
+        | Some senv -> Diag.return acc)
+      Rim_map.empty
+      progs
+  in
+  let sscopes =
+    Rim_map.union (fun _rim _l r -> Some r) sscopes_prog sscopes_rim
+  in
+  Diag.return (progs, sscopes)

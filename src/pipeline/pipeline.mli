@@ -35,7 +35,26 @@ type compile_result =
 
 val compile_files : Flags.compile_mode -> bool -> string list -> compile_result
 
-(* For use in the IDE server *)
+(* For use in the language server *)
 type load_result =
   (Syntax.lib list * Syntax.prog list * Scope.scope) Diag.result
 val load_progs : ?viper_mode:bool -> ?check_actors:bool -> parse_fn -> string list -> Scope.scope -> load_result
+
+module Rim_ord : sig
+  type t = Syntax.resolved_import Source.phrase
+
+  val compare : t -> t -> int
+end
+
+module Rim_map : module type of Map.Make (Rim_ord)
+
+type lsp_load_result = (Syntax.prog list * Scope.t Rim_map.t) Diag.result
+
+val lsp_load
+  :  ?viper_mode:bool
+  -> ?check_actors:bool
+  -> parse_fn
+  -> string list
+  -> Scope.t
+  -> Scope.t Rim_map.t
+  -> lsp_load_result
