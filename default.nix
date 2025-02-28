@@ -830,7 +830,11 @@ EOF
         builtins.concatMap (d: d.buildInputs or []) (builtins.attrValues tests) ++
         [ ncurses
           ocamlPackages.merlin
+          ocamlPackages.ocaml-lsp
           ocamlPackages.utop
+          ocamlPackages.ocaml-recovery-parser
+          ocamlPackages.menhirSdk
+          ocamlPackages.menhirLib
           ocamlformat
           fswatch
           niv
