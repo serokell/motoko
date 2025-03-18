@@ -41,6 +41,21 @@ type prim =
   | Principal
   | Region
 
+module Region_ord = struct
+  type t = Source.region
+
+  let compare l r =
+    let open Source in
+    let join_compare l r = if l = 0 then r else l in
+    let compare_pos l r =
+      join_compare
+        (compare l.file r.file)
+        (join_compare (compare l.line r.line) (compare l.column r.column))
+    in
+    join_compare (compare_pos l.left r.left) (compare_pos l.right r.right)
+end
+module Region_set = Set.Make (Region_ord)
+
 type t = typ
 and typ =
   | Var of var * int                          (* variable *)
@@ -64,7 +79,7 @@ and scope = typ
 and bind_sort = Scope | Type
 
 and bind = {var : var; sort: bind_sort; bound : typ}
-and src = {depr : string option; region : Source.region}
+and src = {depr : string option; region : Source.region; mutable srcs : Region_set.t}
 and field = {lab : lab; typ : typ; src : src}
 
 and con = kind Cons.t
@@ -72,7 +87,7 @@ and kind =
   | Def of bind list * typ
   | Abs of bind list * typ
 
-let empty_src = {depr = None; region = Source.no_region}
+let empty_src = {depr = None; region = Source.no_region; srcs = Region_set.empty}
 
 (* Stable signatures *)
 type stab_sig =
@@ -1059,8 +1074,17 @@ and rel_fields d rel eq tfs1 tfs2 =
   | tf1::tfs1', tf2::tfs2' ->
     (match compare_field tf1 tf2 with
     | 0 ->
-      rel_typ d rel eq tf1.typ tf2.typ &&
-      rel_fields d rel eq tfs1' tfs2'
+      let is_rel =
+        rel_typ d rel eq tf1.typ tf2.typ &&
+        rel_fields d rel eq tfs1' tfs2'
+      in
+      if !Mo_config.Flags.typechecker_combine_srcs && is_rel then begin
+        let srcs = Region_set.union tf1.src.srcs tf2.src.srcs in
+        if rel == eq then
+          tf1.src.srcs <- srcs;
+        tf2.src.srcs <- srcs;
+      end;
+      is_rel
     | -1 when rel != eq ->
       not (RelArg.is_stable_sub d) &&
       rel_fields d rel eq tfs1' tfs2
@@ -1078,8 +1102,17 @@ and rel_tags d rel eq tfs1 tfs2 =
   | tf1::tfs1', tf2::tfs2' ->
     (match compare_field tf1 tf2 with
     | 0 ->
-      rel_typ d rel eq tf1.typ tf2.typ &&
-      rel_tags d rel eq tfs1' tfs2'
+      let is_rel =
+        rel_typ d rel eq tf1.typ tf2.typ &&
+        rel_tags d rel eq tfs1' tfs2'
+      in
+      if !Mo_config.Flags.typechecker_combine_srcs && is_rel then begin
+        let srcs = Region_set.union tf1.src.srcs tf2.src.srcs in
+        if rel == eq then
+          tf1.src.srcs <- srcs;
+        tf2.src.srcs <- srcs;
+      end;
+      is_rel
     | +1 when rel != eq ->
       rel_tags d rel eq tfs1 tfs2'
     | _ -> false
@@ -1269,13 +1302,46 @@ module M = Map.Make (OrdPair)
 
 exception Mismatch
 
+let merge_srcs rel lubs glbs src1 src2 =
+  let depr = None in
+  let region = Source.no_region in
+  let srcs =
+    Region_set.(if rel == lubs then union else inter) src1.srcs src2.srcs
+  in
+  { depr; region; srcs }
+
+let merge_type rel lubs glbs t1 t2 =
+  match t1, t2 with
+  | Obj (s, fs1), Obj (_, fs2) ->
+    let fs =
+      List.map2
+        (fun f1 f2 -> {f1 with src = merge_srcs rel lubs glbs f1.src f2.src})
+        fs1
+        fs2
+    in
+    Obj (s, fs)
+  | Variant fs1, Variant fs2 ->
+    let fs =
+      List.map2
+        (fun f1 f2 -> {f1 with src = merge_srcs rel lubs glbs f1.src f2.src})
+        fs1
+        fs2
+    in
+    Variant fs
+  | _, _ -> if is_con t2 then t2 else t1
+
 let rec combine rel lubs glbs t1 t2 =
   assert (rel == lubs || rel == glbs);
   if t1 == t2 then t1 else
   match M.find_opt (t1, t2) !rel with
   | Some t -> t
   | _ when eq t1 t2 ->
-    let t = if is_con t2 then t2 else t1 in
+    let t =
+      if !Mo_config.Flags.typechecker_combine_srcs then
+        merge_type rel lubs glbs t1 t2
+      else
+        if is_con t2 then t2 else t1
+    in
     rel := M.add (t2, t1) t (M.add (t1, t2) t !rel);
     t
   | _ ->
@@ -1375,7 +1441,12 @@ and combine_fields rel lubs glbs fs1 fs2 =
     | _ ->
       match combine rel lubs glbs f1.typ f2.typ with
       | typ ->
-       {lab = f1.lab; typ; src = empty_src} :: combine_fields rel lubs glbs fs1' fs2'
+        let src =
+          if !Mo_config.Flags.typechecker_combine_srcs
+          then merge_srcs rel lubs glbs f1.src f2.src
+          else empty_src
+        in
+        {lab = f1.lab; typ; src} :: combine_fields rel lubs glbs fs1' fs2'
       | exception Mismatch when rel == lubs ->
         combine_fields rel lubs glbs fs1' fs2'
 
@@ -1389,7 +1460,12 @@ and combine_tags rel lubs glbs fs1 fs2 =
     | +1 -> cons_if (rel == lubs) f2 (combine_tags rel lubs glbs fs1 fs2')
     | _ ->
       let typ = combine rel lubs glbs f1.typ f2.typ in
-      {lab = f1.lab; typ; src = empty_src} :: combine_tags rel lubs glbs fs1' fs2'
+      let src =
+        if !Mo_config.Flags.typechecker_combine_srcs
+        then merge_srcs rel lubs glbs f1.src f2.src
+        else empty_src
+      in
+      {lab = f1.lab; typ; src} :: combine_tags rel lubs glbs fs1' fs2'
 
 let lub t1 t2 = let lubs = ref M.empty in combine lubs lubs (ref M.empty) t1 t2
 let glb t1 t2 = let glbs = ref M.empty in combine glbs (ref M.empty) glbs t1 t2
@@ -1804,10 +1880,10 @@ and pp_pre_stab_field vs ppf (required, {lab; typ; src}) =
 
 and pp_tag vs ppf {lab; typ; src} =
   match typ with
-  | Tup [] -> fprintf ppf "#%s" lab
+  | Tup [] ->
+    fprintf ppf "#%s" lab
   | _ ->
-    fprintf ppf "@[<2>#%s :@ %a@]" lab
-      (pp_typ' vs) typ
+    fprintf ppf "@[<2>#%s :@ %a@]" lab (pp_typ' vs) typ
 
 and vars_of_binds vs bs =
   List.map (fun b -> name_of_var vs (b.var, 0)) bs
