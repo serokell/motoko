@@ -253,9 +253,9 @@ module Make (Cfg : Config) = struct
 
   and operator_type t = Atom (Type.string_of_typ t)
 
-  and path p = match p.it with
+  and path p = source p.at (match p.it with
     | IdH i -> "IdH" $$ [id i]
-    | DotH (p, i) -> "DotH" $$ [path p; id i]
+    | DotH (p, i) -> "DotH" $$ [path p; id i])
 
   and typ t = source t.at (annot_typ t.note (match t.it with
   | PathT (p, ts) -> "PathT" $$ [path p] @ List.map typ ts
