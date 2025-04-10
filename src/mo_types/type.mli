@@ -334,7 +334,6 @@ end
 
 module type PrettyConfig = sig
   val show_stamps : bool
-  val show_src : bool
   val con_sep : string
   val par_sep : string
 end

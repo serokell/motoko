@@ -1661,28 +1661,24 @@ let string_of_func_sort = function
 
 module type PrettyConfig = sig
   val show_stamps : bool
-  val show_src : bool
   val con_sep : string
   val par_sep : string
 end
 
 module ShowStamps = struct
   let show_stamps = true
-  let show_src = false
   let con_sep = "__" (* TODO: revert to "/" *)
   let par_sep = "_"
 end
 
 module ElideStamps = struct
   let show_stamps = false
-  let show_src = false
   let con_sep = ShowStamps.con_sep
   let par_sep = ShowStamps.par_sep
 end
 
 module ParseableStamps = struct
   let show_stamps = true
-  let show_src = false
   let con_sep = "__"
   let par_sep = "_"
 end
