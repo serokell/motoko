@@ -23,7 +23,7 @@ type ret_env = T.typ option
 type val_env  = (T.typ * Source.region * Scope.val_kind * avl) T.Env.t
 
 (* separate maps for values and types; entries only for _public_ elements *)
-type visibility_src = {depr : string option; id_region : Source.region; field_region : Source.region; mutable srcs : T.Region_set.t}
+type visibility_src = {depr : string option; id_region : Source.region; field_region : Source.region; srcs : T.Region_set.t}
 type visibility_env = visibility_src T.Env.t * visibility_src T.Env.t
 
 let available env = T.Env.map (fun (ty, at, kind) -> (ty, at, kind, Available)) env
@@ -2492,10 +2492,7 @@ and check_pat_fields env t tfs pfs ve at : Scope.val_env =
       match pfs' with
       | pf'::_ when pf'.it.id.it = lab ->
         error env pf'.at "M0121" "duplicate field %s in object pattern" lab
-      | _ ->
-        if !Flags.typechecker_combine_srcs then
-          src.T.srcs <- T.Region_set.add pf.it.id.at src.T.srcs;
-        check_pat_fields env t tfs' pfs' ve' at
+      | _ -> check_pat_fields env t tfs' pfs' ve' at
 
 and compare_pat_field pf1 pf2 = compare pf1.it.id.it pf2.it.id.it
 
@@ -2507,9 +2504,6 @@ and pub_fields dec_fields : visibility_env =
 and pub_field dec_field xs : visibility_env =
   match dec_field.it with
   | {vis = { it = Public depr; _}; dec; _} ->
-    (* TODO: consider this case, it will add an entire field body rather than
-       just point to [lab]. *)
-    (*let srcs = singleton_srcs dec_field.at in*)
     let srcs = T.Region_set.empty in
     pub_dec T.{depr = depr; region = dec_field.at; srcs} dec xs
   | _ -> xs
@@ -2540,12 +2534,10 @@ and pub_pat_field src pf xs =
 
 and pub_typ_id src id (xs, ys) : visibility_env =
   let srcs = add_to_srcs id.at src.T.srcs in
-  (*src.T.srcs <- srcs;*)
   (T.Env.add id.it T.{depr = src.depr; id_region = id.at; field_region = src.region; srcs} xs, ys)
 
 and pub_val_id src id (xs, ys) : visibility_env =
   let srcs = add_to_srcs id.at src.T.srcs in
-  (*src.T.srcs <- srcs;*)
   (xs, T.Env.add id.it T.{depr = src.depr; id_region = id.at; field_region = src.region; srcs} ys)
 
 
@@ -2561,7 +2553,6 @@ and object_of_scope env sort dec_fields scope at =
         match T.Env.find_opt id pub_typ with
         | Some src ->
           let srcs = add_to_srcs src.id_region src.srcs in
-          src.srcs <- srcs;
           T.{lab = id; typ = T.Typ c; src = {depr = src.depr; region = src.field_region; srcs}}::tfs
         | _ -> tfs
       ) scope.Scope.typ_env  []
@@ -2572,7 +2563,6 @@ and object_of_scope env sort dec_fields scope at =
         match T.Env.find_opt id pub_val with
         | Some src ->
           let srcs = add_to_srcs src.id_region src.srcs in
-          src.srcs <- srcs;
           T.{lab = id; typ = t; src = {depr = src.depr; region = src.field_region; srcs}}::tfs
         | _ -> tfs
       ) scope.Scope.val_env tfs

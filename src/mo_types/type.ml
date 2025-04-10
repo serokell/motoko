@@ -974,8 +974,6 @@ struct
     Int.shift_right d 1 > max_depth
 end
 
-let cfg_combine_srcs = true
-
 let max_depth = 10_000
 
 let rel_list d p rel eq xs1 xs2 =
@@ -1078,14 +1076,14 @@ and rel_fields d rel eq tfs1 tfs2 =
   | tf1::tfs1', tf2::tfs2' ->
     (match compare_field tf1 tf2 with
     | 0 ->
-      (* TODO: maybe revert these changes? *)
       let is_rel =
         rel_typ d rel eq tf1.typ tf2.typ &&
         rel_fields d rel eq tfs1' tfs2'
       in
-      if !Mo_config.Flags.typechecker_combine_srcs && is_rel && rel != eq then begin
+      if !Mo_config.Flags.typechecker_combine_srcs && is_rel then begin
         let srcs = Region_set.union tf1.src.srcs tf2.src.srcs in
-        tf1.src.srcs <- srcs;
+        if rel == eq then
+          tf1.src.srcs <- srcs;
         tf2.src.srcs <- srcs;
       end;
       is_rel
@@ -1106,14 +1104,14 @@ and rel_tags d rel eq tfs1 tfs2 =
   | tf1::tfs1', tf2::tfs2' ->
     (match compare_field tf1 tf2 with
     | 0 ->
-      (* TODO: maybe revert these changes? *)
       let is_rel =
         rel_typ d rel eq tf1.typ tf2.typ &&
         rel_tags d rel eq tfs1' tfs2'
       in
-      if !Mo_config.Flags.typechecker_combine_srcs && is_rel && rel != eq then begin
+      if !Mo_config.Flags.typechecker_combine_srcs && is_rel then begin
         let srcs = Region_set.union tf1.src.srcs tf2.src.srcs in
-        tf1.src.srcs <- srcs;
+        if rel == eq then
+          tf1.src.srcs <- srcs;
         tf2.src.srcs <- srcs;
       end;
       is_rel
@@ -1310,13 +1308,8 @@ let merge_srcs rel lubs glbs src1 src2 =
   let depr = None in
   let region = Source.no_region in
   let srcs =
-    (*let srcs1 = Region_set.add src1.region src1.srcs in
-    let srcs2 = Region_set.add src2.region src2.srcs in
-    Region_set.(if rel == lubs then union else inter) srcs1 srcs2*)
     Region_set.(if rel == lubs then union else inter) src1.srcs src2.srcs
   in
-  (*src1.srcs <- srcs;
-  src2.srcs <- srcs;*)
   { depr; region; srcs }
 
 let merge_type rel lubs glbs t1 t2 =
@@ -1401,11 +1394,11 @@ let rec combine rel lubs glbs t1 t2 =
     | _, Con _ ->
       (* We want to reach the [else] case to eventually reach [combine_fields]
          and combine sources. *)
-      if not !Mo_config.Flags.typechecker_combine_srcs && sub t1 t2 then
+      if sub t1 t2 then
         let t = if rel == glbs then t1 else t2 in
         rel := M.add (t2, t1) t (M.add (t1, t2) t !rel);
         t
-      else if not !Mo_config.Flags.typechecker_combine_srcs && sub t2 t1 then
+      else if sub t2 t1 then
         let t = if rel == lubs then t1 else t2 in
         rel := M.add (t2, t1) t (M.add (t1, t2) t !rel);
         t
