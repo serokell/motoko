@@ -1349,7 +1349,7 @@ let rec combine rel lubs glbs t1 t2 =
       if !Mo_config.Flags.typechecker_combine_srcs then
         merge_type rel lubs glbs t1 t2
       else
-        if is_con t1 then t2 else t1
+        if is_con t2 then t2 else t1
     in
     rel := M.add (t2, t1) t (M.add (t1, t2) t !rel);
     t
