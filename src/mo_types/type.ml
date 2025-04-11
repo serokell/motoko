@@ -974,8 +974,6 @@ struct
     Int.shift_right d 1 > max_depth
 end
 
-let max_depth = 10_000
-
 let rel_list d p rel eq xs1 xs2 =
   try List.for_all2 (p d rel eq) xs1 xs2 with Invalid_argument _ -> false
 
@@ -1392,8 +1390,6 @@ let rec combine rel lubs glbs t1 t2 =
       Async (s1, t11, combine rel lubs glbs t12 t22)
     | Con _, _
     | _, Con _ ->
-      (* We want to reach the [else] case to eventually reach [combine_fields]
-         and combine sources. *)
       if sub t1 t2 then
         let t = if rel == glbs then t1 else t2 in
         rel := M.add (t2, t1) t (M.add (t1, t2) t !rel);
