@@ -23,12 +23,12 @@ and
 at common supertype
   Any
 structural_equality.mo:12.37-12.43: warning [M0061], comparing abstract type
-  A__10
+  A__1__structural_equality2Emo
 to itself at supertype
   Any
 structural_equality.mo:13.41-13.47: warning [M0062], comparing incompatible types
-  A__11
+  A__2__structural_equality2Emo
 and
-  B
+  B__0__structural_equality2Emo
 at common supertype
   Any
