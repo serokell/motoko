@@ -65,7 +65,10 @@ let to_string show_stamps sep c =
     done;
     Buffer.contents buffer
   in
-  if not show_stamps
+  let ignored_scopes = ["prelude"; "internals"; "@prim"] in
+  if
+    not show_stamps ||
+    (fst c.stamp = 0 && List.mem (snd c.stamp) (List.map Option.some ignored_scopes))
   then c.name
   else
     Printf.sprintf

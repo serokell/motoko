@@ -11,9 +11,9 @@ f-bounds-fail.mo:15.42-15.43: type error [M0046], type argument
 does not match parameter bound
   C__2__f2Dbounds2Dfail2Emo
 f-bounds-fail.mo:3.38-3.41: type error [M0046], type argument
-  Int__0__prelude
+  Int
 does not match parameter bound
-  Nat__0__prelude
+  Nat
 f-bounds-fail.mo:9.53-9.54: type error [M0096], expression of type
   A__10__f2Dbounds2Dfail2Emo
 cannot produce expected type

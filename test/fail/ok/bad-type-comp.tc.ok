@@ -1,11 +1,11 @@
 bad-type-comp.mo:5.10-5.19: type error [M0096], expression of type
   module {}
 cannot produce expected type
-  module {type T = Null__0__prelude}
+  module {type T = Null}
 bad-type-comp.mo:6.10-6.39: type error [M0096], expression of type
-  module {type T = Int__0__prelude}
+  module {type T = Int}
 cannot produce expected type
-  module {type T = Null__0__prelude}
+  module {type T = Null}
 bad-type-comp.mo:7.73-7.74: type error [M0018], duplicate type field name T in object type
 bad-type-comp.mo:11.15-11.16: type error [M0029], unbound type T
 Did you mean type Text?

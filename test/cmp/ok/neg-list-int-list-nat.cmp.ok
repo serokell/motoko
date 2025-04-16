@@ -1,17 +1,17 @@
 (unknown location): Compatibility error [M0170], stable variable ln of previous type
-  List__0__files2Flist2Dint2Emost<Int__0__prelude> = ?(Int__0__prelude,
-                                                       List__0__files2Flist2Dint2Emost<
-                                                       Int__0__prelude>)
+  List__0__files2Flist2Dint2Emost<Int> = ?(Int,
+                                           List__0__files2Flist2Dint2Emost<
+                                           Int>)
 cannot be consumed at new type
-  List__0__files2Flist2Dnat2Emost<Nat__0__prelude> = ?(Nat__0__prelude,
-                                                       List__0__files2Flist2Dnat2Emost<
-                                                       Nat__0__prelude>) without data loss. Use an explicit migration function.
+  List__0__files2Flist2Dnat2Emost<Nat> = ?(Nat,
+                                           List__0__files2Flist2Dnat2Emost<
+                                           Nat>) without data loss. Use an explicit migration function.
 (unknown location): Compatibility error [M0170], stable variable lnn of previous type
-  List__0__files2Flist2Dint2Emost<(Int__0__prelude, Int__0__prelude)> = 
-  ?((Int__0__prelude, Int__0__prelude),
-    List__0__files2Flist2Dint2Emost<(Int__0__prelude, Int__0__prelude)>)
+  List__0__files2Flist2Dint2Emost<(Int, Int)> = ?((Int, Int),
+                                                  List__0__files2Flist2Dint2Emost<
+                                                  (Int, Int)>)
 cannot be consumed at new type
-  List__0__files2Flist2Dnat2Emost<(Nat__0__prelude, Nat__0__prelude)> = 
-  ?((Nat__0__prelude, Nat__0__prelude),
-    List__0__files2Flist2Dnat2Emost<(Nat__0__prelude, Nat__0__prelude)>) without data loss. Use an explicit migration function.
+  List__0__files2Flist2Dnat2Emost<(Nat, Nat)> = ?((Nat, Nat),
+                                                  List__0__files2Flist2Dnat2Emost<
+                                                  (Nat, Nat)>) without data loss. Use an explicit migration function.
 FALSE
