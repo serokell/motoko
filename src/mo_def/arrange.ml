@@ -8,6 +8,7 @@ open Wasm.Sexpr
 module type Config = sig
   val include_sources : bool
   val include_types : bool
+  val include_type_rep : bool
   val include_docs : Trivia.trivia_info Trivia.PosHashtbl.t option
   val include_parenthetical : bool
   val main_file : string option
@@ -15,6 +16,7 @@ end
 
 module Default = struct
   let include_sources = false
+  let include_type_rep = false
   let include_types = false
   let include_parenthetical = true (* false for vscode *)
   let include_docs = None
@@ -23,9 +25,7 @@ end
 
 module Type_pretty = Mo_types.Type.MakePretty (Mo_types.Type.ElideStamps)
 
-
 module Make (Cfg : Config) = struct
-
   let ($$) head inner = Node (head, inner)
 
   let pos p =
@@ -54,10 +54,17 @@ module Make (Cfg : Config) = struct
   | Mo_types.Type.Triv -> Atom "Triv"
   | Mo_types.Type.Await -> Atom "Await"
 
-  let annot_typ t it = if Cfg.include_types then ":" $$ [it; typ t] else it
+  let annot_typ t it =
+    if Cfg.include_types
+    then
+      if Cfg.include_type_rep
+      then ":" $$ [it; typ t; Arrange_type.typ t]
+      else ":" $$ [it; typ t]
+    else it
+
   let annot note = annot_typ note.note_typ
 
-  let id i = Atom i.it
+  let id i = source i.at ("ID" $$ [Atom i.it])
   let tag i = Atom ("#" ^ i.it)
 
   let rec exp e = source e.at (annot e.note (match e.it with
@@ -230,10 +237,10 @@ module Make (Cfg : Config) = struct
       | Flexible -> Atom "Flexible"
       | Stable -> Atom "Stable")
 
-  and typ_field (tf : typ_field) = match tf.it with
-    | ValF (id, t, m) -> id.it $$ [typ t; mut m]
-    | TypF (id', tbs, t) ->
-        "TypF" $$ [id id'] @ List.map typ_bind tbs @ [typ t]
+  and typ_field (tf : typ_field) = source tf.at (match tf.it with
+    | ValF (lab, t, m) -> "ValF" $$ [id lab; typ t; mut m]
+    | TypF (lab, tbs, t) -> "TypF" $$ id lab :: List.map typ_bind tbs @ [typ t])
+
   and typ_item ((id, ty) : typ_item) =
     match id with
     | None -> [typ ty]
