@@ -8,12 +8,12 @@ let abstract abs con = (abs, con)
 (* private helper *)
 let repr_of_symbol : xsymbol -> (string * string) =
   let simple_token con = (con, con) in
-  let binop = abstract "<binop>" in
-  let relop = abstract "<relop>" in
-  let binassign = abstract "<binassign>" in
+  let binop con = abstract "<binop>" "+" in
+  let relop con = abstract "<relop>" "==" in
+  let binassign con = abstract "<binassign>" "+=" in
   (* all unary operators are also binary operators, so keep them unary *)
-  let unop = abstract "<unop>" in
-  let unassign = abstract "<unassign>" in
+  let unop con = abstract "<unop>" "-" in
+  let unassign con = abstract "<unassign>" "-=" in
   (* non-terminal examples: *)
   let eg_exp = "42" in
   let eg_pat = "x" in
@@ -129,7 +129,7 @@ let repr_of_symbol : xsymbol -> (string * string) =
   | X (T T_EQ) -> simple_token "="
   | X (T T_EOF) -> simple_token "<eof>"
   | X (T T_ELSE) -> simple_token "else"
-  | X (T T_DOT_NUM) -> simple_token ".<nat>"
+  | X (T T_DOT_NUM) -> ".<nat>", ".1"
   | X (T T_DOT) -> simple_token "."
   | X (T T_DO) -> simple_token "do"
   | X (T T_DIVOP) -> binop "/"
@@ -154,7 +154,7 @@ let repr_of_symbol : xsymbol -> (string * string) =
   | X (T T_AWAITSTAR) -> simple_token "await*"
   | X (T T_ASYNC) -> simple_token "async"
   | X (T T_ASYNCSTAR) -> simple_token "async*"
-  | X (T T_ASSIGN) -> binassign "assign"
+  | X (T T_ASSIGN) -> simple_token ":="
   | X (T T_ASSERT) -> simple_token "assert"
   | X (T T_ARROW) -> simple_token "->"
   | X (T T_ANDOP) -> binop "&"
@@ -197,6 +197,7 @@ let repr_of_symbol : xsymbol -> (string * string) =
   | X (N N_exp_un_bl_) -> "<exp_un(bl)>", eg_exp
   | X (N N_exp_un_ob_) -> "<exp_un(ob)>", eg_exp
   | X (N N_func_body) -> "<func_body>", "{}"
+  | X (N N_func_pat) -> "<func_pat>", "f(x : Int)"
   | X (N N_imp) -> "<imp>", eg_imp
   | X (N N_import_list) -> "<import_list>", eg_imp
   | X (N N_inst) -> "<inst>", "<" ^ eg_typ ^ ">"
@@ -227,7 +228,7 @@ let repr_of_symbol : xsymbol -> (string * string) =
   | X (N N_seplist_exp_ob__COMMA_) -> seplist ("<exp(ob)>", eg_exp) comma
   | X (N N_seplist_exp_field_semicolon_) -> seplist ("<exp_field>", eg_exp_field) semi
   | X (N N_seplist1_exp_field_semicolon_) -> "seplist1(<exp_field>,<semicolon>)", eg_exp_field
-  | X (N N_separated_nonempty_list_AND_exp_post_ob__) -> "seplist+(<exp_post(ob)>,and)", eg_exp ^ "and"
+  | X (N N_separated_nonempty_list_AND_exp_post_ob__) -> "seplist+(<exp_post(ob)>,and)", eg_exp
   | X (N N_seplist_exp_nonvar_ob__COMMA_) -> seplist ("<exp_nonvar(ob)>", eg_exp) comma
   | X (N N_seplist_imp_SEMICOLON_) -> seplist ("<imp>", eg_imp) semi2
   | X (N N_seplist_imp_semicolon_) -> seplist ("<imp>", eg_imp) semi
