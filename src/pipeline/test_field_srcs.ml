@@ -154,6 +154,94 @@ let%expect_test "" =
       (@@ test-field-srcs.mo (Pos 9 16) (Pos 9 20))
     )
     Sources table:
+    internals:10.19-10.23: internals:10.19-10.23 internals:58.17-58.21 internals:64.17-64.21 internals:70.17-70.21 internals:76.17-76.21 internals:84.17-84.21 internals:92.17-92.21 internals:105.17-105.21
+    internals:56.9-56.10: internals:56.9-56.10
+    internals:57.9-57.10: internals:57.9-57.10
+    internals:58.17-58.21: internals:58.17-58.21
+    internals:62.9-62.10: internals:62.9-62.10
+    internals:63.9-63.10: internals:63.9-63.10
+    internals:64.17-64.21: internals:64.17-64.21
+    internals:68.9-68.10: internals:68.9-68.10
+    internals:69.9-69.10: internals:69.9-69.10
+    internals:70.17-70.21: internals:70.17-70.21
+    internals:74.9-74.10: internals:74.9-74.10
+    internals:75.9-75.10: internals:75.9-75.10
+    internals:76.17-76.21: internals:76.17-76.21
+    internals:82.9-82.10: internals:82.9-82.10
+    internals:83.9-83.10: internals:83.9-83.10
+    internals:84.17-84.21: internals:84.17-84.21
+    internals:90.10-90.18: internals:90.10-90.18
+    internals:91.9-91.10: internals:91.9-91.10
+    internals:92.17-92.21: internals:92.17-92.21
+    internals:103.10-103.18: internals:103.10-103.18
+    internals:104.9-104.10: internals:104.9-104.10
+    internals:105.17-105.21: internals:105.17-105.21
+    internals:305.4-305.11: internals:305.4-305.11 internals:372.6-372.13
+    internals:306.4-306.12: internals:306.4-306.12 internals:373.6-373.14
+    internals:310.21-310.23: internals:310.21-310.23
+    internals:310.57-310.62: internals:310.57-310.62
+    internals:372.6-372.13: internals:372.6-372.13
+    internals:373.6-373.14: internals:373.6-373.14
+    internals:408.15-408.26: internals:408.15-408.26
+    internals:409.15-409.32: internals:409.15-409.32
+    internals:410.5-410.16: internals:410.5-410.16
+    internals:411.5-411.23: internals:411.5-411.23
+    internals:412.5-412.22: internals:412.5-412.22
+    internals:413.5-413.23: internals:413.5-413.23
+    internals:418.4-418.8: internals:418.4-418.8 internals:477.14-477.18
+    internals:419.4-419.11: internals:419.4-419.11
+    internals:423.3-423.26: internals:423.3-423.26 internals:482.11-482.34
+    internals:428.5-428.20: internals:428.5-428.20
+    internals:429.7-429.15: internals:429.7-429.15 internals:447.16-447.24
+    internals:430.7-430.30: internals:430.7-430.30 internals:466.55-466.78
+    internals:431.18-431.29: internals:431.18-431.29
+    internals:432.5-432.17: internals:432.5-432.17
+    internals:433.7-433.11: internals:433.7-433.11
+    internals:434.10-434.17: internals:434.10-434.17 internals:467.11-467.18
+    internals:435.10-435.19: internals:435.10-435.19 internals:473.11-473.20
+    internals:436.10-436.17: internals:436.10-436.17 internals:484.12-484.19
+    internals:438.7-438.18: internals:438.7-438.18
+    internals:439.7-439.18: internals:439.7-439.18
+    internals:440.7-440.10: internals:440.7-440.10
+    internals:441.7-441.30: internals:441.7-441.30
+    internals:447.8-447.11: internals:447.8-447.11
+    internals:447.16-447.24: internals:447.16-447.24
+    internals:448.8-448.15: internals:448.8-448.15
+    internals:449.8-449.17: internals:449.8-449.17
+    internals:450.8-450.15: internals:450.8-450.15
+    internals:451.8-451.32: internals:451.8-451.32
+    internals:451.37-451.60: internals:451.37-451.60
+    internals:451.86-451.94: internals:451.86-451.94
+    internals:466.55-466.78: internals:466.55-466.78
+    internals:467.11-467.18: internals:467.11-467.18
+    internals:470.11-470.18: internals:470.11-470.18
+    internals:473.11-473.20: internals:473.11-473.20
+    internals:477.14-477.18: internals:477.14-477.18
+    internals:482.11-482.34: internals:482.11-482.34
+    internals:484.12-484.19: internals:484.12-484.19
+    internals:487.32-487.55: internals:487.32-487.55
+    internals:488.12-488.19: internals:488.12-488.19
+    internals:540.15-540.25: internals:540.15-540.25
+    internals:540.27-540.35: internals:540.27-540.35
+    internals:541.21-541.31: internals:540.15-540.25 internals:541.21-541.31
+    internals:541.35-541.43: internals:540.27-540.35 internals:541.35-541.43
+    internals:555.16-555.22: internals:555.16-555.22 internals:609.37-609.43
+    internals:555.38-555.40: internals:555.38-555.40
+    internals:555.48-555.53: internals:555.48-555.53
+    internals:555.64-555.67: internals:555.64-555.67
+    internals:555.86-555.89: internals:555.86-555.89 internals:565.17-565.20 internals:609.60-609.63 internals:612.55-612.58 internals:670.45-670.48 internals:697.19-697.22
+    internals:555.100-555.104: internals:555.100-555.104 internals:609.72-609.76 internals:613.34-613.38 internals:671.24-671.28 internals:688.36-688.40 internals:697.35-697.39
+    internals:565.17-565.20: internals:565.17-565.20
+    internals:609.37-609.43: internals:609.37-609.43
+    internals:609.60-609.63: internals:609.60-609.63
+    internals:609.72-609.76: internals:609.72-609.76
+    internals:612.55-612.58: internals:612.55-612.58
+    internals:613.34-613.38: internals:613.34-613.38
+    internals:670.45-670.48: internals:670.45-670.48
+    internals:671.24-671.28: internals:671.24-671.28
+    internals:688.36-688.40: internals:688.36-688.40
+    internals:697.19-697.22: internals:697.19-697.22
+    internals:697.35-697.39: internals:697.35-697.39
     test-field-srcs.mo:2.9-2.15: test-field-srcs.mo:2.9-2.15
     test-field-srcs.mo:3.17-3.21: test-field-srcs.mo:3.17-3.21
     test-field-srcs.mo:8.9-8.15: test-field-srcs.mo:8.9-8.15
