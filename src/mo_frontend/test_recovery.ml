@@ -27,6 +27,21 @@ let show  (r: Mo_def.Syntax.prog Diag.result) : String.t =
     ^ "\n with errors:\n" ^ show_msgs msgs
   | Error msgs -> "Errors:\n" ^ show_msgs msgs
 
+let show_with_types  (r: Mo_def.Syntax.prog Diag.result) : String.t =
+  let show_msgs msgs =
+    String.concat "\n" (List.map Diag.string_of_message msgs) in
+  match r with
+  | Ok (prog, msgs) ->
+    let module Arrange = Mo_def.Arrange.Make(
+      struct
+        include Mo_def.Arrange.Default
+        let include_types = true
+      end
+    ) in
+    "Ok: " ^ Wasm.Sexpr.to_string 80 (Arrange.prog prog)
+    ^ "\n with errors:\n" ^ show_msgs msgs
+  | Error msgs -> "Errors:\n" ^ show_msgs msgs
+
 
 let _parse_test input (expected : string) =
   let actual = parse_from_string input in
@@ -410,3 +425,156 @@ let%expect_test "test5" =
       module class <func_pat> <annot_opt> <class_body> (e.g. 'module class f(x : Int) : Int = {}')
       actor class <func_pat> <annot_opt> <class_body> (e.g. 'actor class f(x : Int) : Int = {}')
       persistent actor class <func_pat> <annot_opt> <class_body> (e.g. 'persistent actor class f(x : Int) : Int = {}') |}]
+
+let%expect_test "test type recovery" =
+  let s = "func test_func () {
+  let x = Counter(0);
+  x.
+  let a = 1;
+}
+
+class Counter(n: Nat) {
+  var counter : Nat = n;
+  func inc() {counter +=1;};
+  func get() : Nat {counter};
+}" in
+  match (parse_from_string s) with
+  | Ok (prog, _) -> begin
+    let open Mo_frontend in
+    let async_cap = Pipeline.async_cap_of_prog prog in
+    match (Typing.infer_prog ~enable_type_recovery:true Pipeline.initial_stat_env None async_cap prog) with
+    | Ok (_, msgs) ->
+      Printf.printf "%s" @@ show_with_types (Ok (prog, msgs));
+      [%expect {|
+        Ok: (Prog
+          (LetD
+            (: (VarP (ID test_func)) () -> ())
+            (:
+              (FuncE
+                () -> ()
+                Local
+                test_func
+                (: (TupP) ())
+                _
+
+                (:
+                  (BlockE
+                    (LetD
+                      (: (VarP (ID x)) {})
+                      (:
+                        (CallE
+                          _
+                          (: (VarE (ID Counter)) (n : Nat) -> Counter)
+                          (: (LitE (NatLit 0)) Nat)
+                        )
+                        {}
+                      )
+                    )
+                    (ExpD
+                      (:
+                        (CallE
+                          _
+                          (: (DotE (: (VarE (ID x)) {}) (ID a)) ???)
+                          (: (LitE (PreLit 1 Nat)) ???)
+                        )
+                        ???
+                      )
+                    )
+                  )
+                  ()
+                )
+              )
+              () -> ()
+            )
+          )
+          (ClassD
+            _
+            Local
+            (ID Counter)
+            (:
+              (ParP
+                (: (AnnotP (: (VarP (ID n)) Nat) (: (PathT (IdH (ID Nat))) Nat)) Nat)
+              )
+              Nat
+            )
+            _
+            Object
+            (ID @anon-object-7.23)
+            (DecField
+              (VarD
+                (ID counter)
+                (: (AnnotE (: (VarE (ID n)) Nat) (: (PathT (IdH (ID Nat))) Nat)) Nat)
+              )
+              Private
+              (Flexible)
+            )
+            (DecField
+              (LetD
+                (: (VarP (ID inc)) () -> ())
+                (:
+                  (FuncE
+                    () -> ()
+                    Local
+                    inc
+                    (: (TupP) ())
+                    _
+
+                    (:
+                      (BlockE
+                        (ExpD
+                          (:
+                            (AssignE
+                              (: (VarE (ID counter)) var Nat)
+                              (:
+                                (BinE
+                                  Nat
+                                  (: (VarE (ID counter)) Nat)
+                                  AddOp
+                                  (: (LitE (NatLit 1)) Nat)
+                                )
+                                Nat
+                              )
+                            )
+                            ()
+                          )
+                        )
+                      )
+                      ()
+                    )
+                  )
+                  () -> ()
+                )
+              )
+              Private
+              (Flexible)
+            )
+            (DecField
+              (LetD
+                (: (VarP (ID get)) () -> Nat)
+                (:
+                  (FuncE
+                    () -> Nat
+                    Local
+                    get
+                    (: (TupP) ())
+                    (: (PathT (IdH (ID Nat))) Nat)
+
+                    (: (BlockE (ExpD (: (VarE (ID counter)) Nat))) Nat)
+                  )
+                  () -> Nat
+                )
+              )
+              Private
+              (Flexible)
+            )
+          )
+        )
+
+         with errors:
+        (unknown location): type error [M0072], field a does not exist in type:
+          {}
+      |}]
+    | Error msgs -> Printf.printf "%s" @@ show (Error msgs)
+    end
+  | Error _ as r -> Printf.printf "%s" @@ show r;
+  [%expect.unreachable];
