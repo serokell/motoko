@@ -185,11 +185,17 @@ let async_cap_of_prog prog =
      else
        Async_cap.initial_cap()
 
-let infer_prog ?(viper_mode=false) pkg_opt senv async_cap prog : (Type.typ * Scope.scope) Diag.result =
+let infer_prog
+    ?(viper_mode=false)
+    ?(enable_type_recovery=false)
+    pkg_opt
+    senv
+    async_cap
+    prog : (Type.typ * Scope.scope) Diag.result =
   let filename = prog.Source.note.Syntax.filename in
   phase "Checking" filename;
   Cons.session ~scope:filename (fun () ->
-    let r = Typing.infer_prog ~viper_mode pkg_opt senv async_cap prog in
+    let r = Typing.infer_prog ~viper_mode ~enable_type_recovery pkg_opt senv async_cap prog in
     if !Flags.trace && !Flags.verbose then begin
       match r with
       | Ok ((_, scope), _) ->
@@ -204,7 +210,11 @@ let infer_prog ?(viper_mode=false) pkg_opt senv async_cap prog : (Type.typ * Sco
     let* () = Definedness.check_prog prog in
     Diag.return t_sscope)
 
-let check_progs ?(viper_mode=false) senv progs : (Scope.t list * Scope.t) Diag.result =
+let check_progs
+    ?(viper_mode=false)
+    ?(enable_type_recovery=false)
+    senv
+    progs : (Scope.t list * Scope.t) Diag.result =
   let rec go senv sscopes = function
     | [] -> Diag.return (List.rev sscopes, senv)
     | prog::progs ->
@@ -213,7 +223,7 @@ let check_progs ?(viper_mode=false) senv progs : (Scope.t list * Scope.t) Diag.r
       let async_cap = async_cap_of_prog prog in
       let* _t, sscope =
         Cons.session ~scope:filename (fun () ->
-          infer_prog ~viper_mode senv None async_cap prog)
+          infer_prog ~viper_mode ~enable_type_recovery senv None async_cap prog)
       in
       let senv' = Scope.adjoin senv sscope in
       let sscopes' = sscope :: sscopes in
@@ -494,7 +504,14 @@ let chase_imports parsefn senv0 imports : (Syntax.lib list * Scope.scope) Diag.r
   let* libs, senv, _cache = chase_imports_cached parsefn senv0 imports cache in
   Diag.return (libs, senv)
 
-let load_progs_cached ?viper_mode ?check_actors parsefn files senv scope_cache : load_result_cached =
+let load_progs_cached
+    ?viper_mode
+    ?check_actors
+    ?(enable_type_recovery=false)
+    parsefn
+    files
+    senv
+    scope_cache : load_result_cached =
   let open Diag.Syntax in
   let* parsed = Diag.traverse (parsefn Source.no_region) files in
   let* rs = resolve_progs parsed in
@@ -506,7 +523,7 @@ let load_progs_cached ?viper_mode ?check_actors parsefn files senv scope_cache :
   let* () = Typing.check_actors ?viper_mode ?check_actors senv progs in
   (* [infer_prog] seems to annotate the AST with types by mutating some of its
      nodes, therefore, we always run the type checker for programs. *)
-  let* sscopes, senv = check_progs ?viper_mode senv progs in
+  let* sscopes, senv = check_progs ?viper_mode ~enable_type_recovery senv progs in
   let prog_result =
     List.map2
       (fun (prog, rims) sscope ->
